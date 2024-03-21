@@ -1,0 +1,3 @@
+[submodule "ultrasound-automated-algorithm"]
+	path = ultrasound-automated-algorithm
+	url = https://github.com/timvanderzee/ultrasound-automated-algorithm
