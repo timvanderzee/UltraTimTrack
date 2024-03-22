@@ -21,7 +21,7 @@ function varargout = UltraTrack_v5_4(varargin)
 
 % Edit the above text to modify the response to help UltraTrack_v5_4
 
-% Last Modified by GUIDE v2.5 07-Mar-2024 14:41:55
+% Last Modified by GUIDE v2.5 22-Mar-2024 12:57:53
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -53,7 +53,7 @@ function UltraTrack_v5_4_OpeningFcn(hObject, eventdata, handles, varargin)
 % varargin   command line arguments to UltraTrack_v5_4 (see VARARGIN)
 
 % Check if Parallel Computing Toolbox is installed
-chkParallelToolBox(); %if exists it runs infinitely till Ultratimtrack is closed
+% chkParallelToolBox(); %if exists it runs infinitely till Ultratimtrack is closed
 
 % Choose default command line output for UltraTrack_v5_4
 handles.output = hObject;
@@ -1728,7 +1728,7 @@ if isfield(handles,'Region')
             %info about tracking for replication purposes
             TrackingData.ProcessingTime = handles.ProcessingTime; %two
             TrackingData.BlockSize = handles.BlockSize;
-            TrackingData.Gains = [handles.apogain handles.posgain handles.fasgain];
+            TrackingData.Gains = handles.fcor / handles.FrameRate; %[handles.apogain handles.posgain handles.fasgain];
             TrackingData.Parallel = handles.do_parfor.Value;
             TrackingData.info = "Processing [TimTrack; Opticflow], %%\nBlockSize [width; height], %%\nGains [Apo, Position, Angle]";
 
@@ -2458,178 +2458,12 @@ function process_all_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% all frames
-frames = 1:handles.NumFrames;
-% parms = get_TimTrack_parms();
+% Run TimTrack
+handles = process_all_TimTrack(hObject, eventdata, handles);
 
-
-im1 = imcrop(handles.ImStack(:,:,1),handles.crop_rect);
-
-
-if isfield(handles,'ImStack')
-    % find current frame number from slider
-    frame_no = round(get(handles.frame_slider,'Value'));
-
-    h = waitbar(0,'Please wait while processing forward...','Name','Running Opticflow...');
-
-    for i = 1:length(handles.Region)
-
-        % NOT NEEDED as image are already cut
-        % for f = frames
-        %     im2(:,:,f) = imcrop(handles.ImStack(:,:,f),handles.crop_rect);
-        % end
-        %im2 = handles.ImStack; % --> waste of memory
-        % Feel free to increase this even higher and see other progress monitors fail.
-        numIterations = length(frames);
-
-        parms = handles.parms;
-        parms.extrapolation = 0;
-
-        % TimTrack (parfor or for)
-        if handles.do_parfor.Value
-            % Then construct a ParforProgressbar object:
-            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...:)');
-            
-            tstart = tic;
-            parfor f = frames
-                %@Tim: resize image to downsample the uint8 matrix and less
-                %time process in Tim track
-                % --> geofeatuers(f) = auto_ultrasound(imresize(im2(:,:,f),0.5),parms);
-              
-                geofeatures(f) = auto_ultrasound(handles.ImStack(:,:,f), parms);
-                WaitMessage.Send; %update waitbar parfor
-
-            end
-            WaitMessage.Destroy(); %update waitbar parfor
-            handles.ProcessingTime(1) = toc(tstart);
-            %         
-
-        else
-
-            % res_val = 2;
-            % bau = parms; %bau is just the fanciest name you can give to
-            % any variable :)
-            % bau.apo.apox =  floor(bau.apo.apox/res_val);
-            % bau.apo.x = bau.apo.x /res_val;
-            % bau.fas.Emask = imresize(bau.fas.Emask, (1/res_val) );
-            % bau.fas.Emask_radius = bau.fas.Emask_radius ./ res_val;
-            % bau.ROI = floor(bau.ROI / res_val);
-            tstart = tic;
-            hwb = waitbar(0,'','Name','Running TimTrack...:)');
-            for f = frames
-                %@Tim: resize image to downsample the uint8 matrix and less
-                %time process in Tim track
-                % --> 
-                
-                %geofeatures(f) = auto_ultrasound(imresize(im2(:,:,f), 1/res_val),bau);
-                geofeatures(f) = auto_ultrasound(handles.ImStack(:,:,f), parms);
-                %disp(f)
-                waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
-
-            end
-            close(hwb)
-            handles.ProcessingTime(1) = toc(tstart);
-        end
-
-%        Adjust the parameter of geofeat
-        % for kk = 1:length(geofeatures)
-        %     geofeatures(kk).thickness = geofeatures(kk).thickness * res_val;
-        %     geofeatures(kk).faslen = geofeatures(kk).faslen * res_val;
-        %     geofeatures(kk).fat_thickness = geofeatures(kk).fat_thickness * res_val;
-        %     geofeatures(kk).super_coef = geofeatures(kk).super_coef * res_val;
-        %     geofeatures(kk).deep_coef = geofeatures(kk).deep_coef * res_val;
-        % 
-        % end
-
-        handles.geofeatures = geofeatures;
-
-    end
-
-    %% Optical flow and state estimation
-    % setup current and new image
-    points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
-    points = double(points.Location);
-    [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
-    points = points(inPoints,:);
-
-    %% Define a smaller area with features pts around the fascicle line
-    %get points around fascicle line
-    %ptsFas = [ handles.Region.Fascicle.fas_x{1,1}, handles.Region.Fascicle.fas_y{1,1}] ;
-    
-    % Calculate the distance between each point of interest and the line defined by ptsFas
-    %distances = pointToLineDistance(points, ptsFas);
-
-    % Set the maximum distance within which a point is considered around the line
-    %maxDistance = round(2 / handles.ID); % 2mm, adjust according to 10% of pixels to mm
-
-    % Keep only the points that are within the maximum distance from the line
-    % selectedPoints = points(distances <= maxDistance, :);
-    %
-    % points = selectedPoints;
-
-    %% Initialize point tracker and run opticflow
-    tstart = tic;
-    %calculate block size according to ROI 
-    width = floor(max(abs(diff(handles.ROI.XData))) * 0.20);
-    height = floor(max(abs(diff(handles.ROI.YData))) * 0.40); %thickness changes?
-
-    handles.BlockSize = [width height]; %save as width and height for later comparison
-
-    % Ensure width and height are both odd numbers
-    if mod(width, 2) == 0
-        width = width + 1; % Increment by 1 to make it odd
-    end
-    
-    if mod(height, 2) == 0
-        height = height + 1; % Increment by 1 to make it odd
-    end
-
-    pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[height width]);
-    %             pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
-    initialize(pointTracker,points,im1);
-
-    for f = frame_no+1:get(handles.frame_slider,'Max')
-        % Get the current image
-
-        %                 profile on
-        im2 = imcrop(handles.ImStack(:,:,handles.start_frame+f-1),handles.crop_rect);
-        handles.NIm = im2;
-
-        % Compute the flow and new roi
-        [pointsNew, isFound] = step(pointTracker, im2);
-        [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
-        handles.Region(i).warp(:,:,f) = w;
-
-        handles.CIm = handles.NIm;
-
-        for j = 1:length(handles.Region(i).Fascicle)
-
-            % optical flow
-            handles = apply_transform(handles,f,f-1,i,j);
-
-            % state estimation
-            handles = state_estimator(handles,f,i,j);
-
-            points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-            points = double(points.Location);
-            [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
-            points = points(inPoints,:);
-            setPoints(pointTracker, points);
-
-        end
-
-        % profile viewer
-        waitbar((f+(get(handles.frame_slider,'Max')*(i-1)))/...
-            (get(handles.frame_slider,'Max')*length(handles.Region)),h)
-    end
-
-
-    % correct
-
-
-end
-close(h)
-handles.ProcessingTime(2) = toc(tstart);
+% Run UltraTrack (note: includes state estimation on ROI)
+handles = process_all_UltraTrack(hObject, eventdata, handles);
+   
 
 % Update handles structure
 guidata(hObject, handles);
@@ -2639,67 +2473,281 @@ guidata(hObject, handles);
 
 show_data(hObject, handles)
 
+function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
+
+    %% Optical flow and state estimation
+    % setup current and new image
+    frame_no = 1;
+    
+    im1 = imcrop(handles.ImStack(:,:,1),handles.crop_rect);
+    h = waitbar(0,'0%','Name','Running Opticflow...');
+
+    for i = 1:length(handles.Region)
+            
+        points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
+        points = double(points.Location);
+        [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
+        points = points(inPoints,:);
+
+        %% Define a smaller area with features pts around the fascicle line
+        %get points around fascicle line
+        %ptsFas = [ handles.Region.Fascicle.fas_x{1,1}, handles.Region.Fascicle.fas_y{1,1}] ;
+
+        % Calculate the distance between each point of interest and the line defined by ptsFas
+        %distances = pointToLineDistance(points, ptsFas);
+
+        % Set the maximum distance within which a point is considered around the line
+        %maxDistance = round(2 / handles.ID); % 2mm, adjust according to 10% of pixels to mm
+
+        % Keep only the points that are within the maximum distance from the line
+        % selectedPoints = points(distances <= maxDistance, :);
+        %
+        % points = selectedPoints;
+
+        %% Initialize point tracker and run opticflow
+        tstart = tic;
+        %calculate block size according to ROI 
+        width = floor(max(abs(diff(handles.ROI.XData))) * 0.20);
+        height = floor(max(abs(diff(handles.ROI.YData))) * 0.40); %thickness changes?
+
+        handles.BlockSize = [width height]; %save as width and height for later comparison
+
+        % Ensure width and height are both odd numbers
+        if mod(width, 2) == 0
+            width = width + 1; % Increment by 1 to make it odd
+        end
+
+        if mod(height, 2) == 0
+            height = height + 1; % Increment by 1 to make it odd
+        end
+
+        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[height width]);
+        %             pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
+        initialize(pointTracker,points,im1);
 
 
-function[handles] = state_estimator(handles,frame_no,i,j)
+        for f = frame_no+1:get(handles.frame_slider,'Max')
+            % Get the current image
+
+            %                 profile on
+            im2 = imcrop(handles.ImStack(:,:,handles.start_frame+f-1),handles.crop_rect);
+            handles.NIm = im2;
+
+            % Compute the flow and new roi
+            [pointsNew, isFound] = step(pointTracker, im2);
+            [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
+            handles.Region(i).warp(:,:,f) = w;
+
+            handles.CIm = handles.NIm;
+
+            for j = 1:length(handles.Region(i).Fascicle)
+
+                % optical flow
+                handles = apply_transform(handles,f,f-1,i,j);
+
+                % state estimation
+                handles = ROI_state_estimator(handles,f,i,j);
+
+                points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
+                points = double(points.Location);
+                [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
+                points = points(inPoints,:);
+                setPoints(pointTracker, points);
+
+            end
+
+            % profile viewer
+            frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
+            waitbar(frac_progress,h, [num2str(round(frac_progress*100)), '%'])
+        end
+
+
+        % correct
+
+
+    end
+close(h)
+handles.ProcessingTime(2) = toc(tstart);
+
+
+function[handles] = process_all_TimTrack(hObject, eventdata, handles)
+
+% run TimTrack on all frames
+frames = 1:handles.NumFrames;
+numIterations = length(frames);
+
+parms = handles.parms;
+parms.extrapolation = 0;
+
+if isfield(handles,'ImStack')
+    im2 = imresize(handles.ImStack, 1/handles.imresize_fac);
+
+    % call once to get the correct fascicle region
+    [geofeatures, ~, parms] = auto_ultrasound(im2(:,:,1), parms);
+    
+    % call again a bunch of times to get estimate the total duration
+    for i = 1:min([size(im2,3), 5])
+        tstart = tic;
+        geofeatures = auto_ultrasound(im2(:,:,1), parms);
+        dt = toc(tstart);
+    end
+    
+    est_duration = dt * numIterations;
+    
+	% prompt to optionally change processing based on computational time
+    answer = 'Undefined';
+    if (est_duration < 60) && handles.do_parfor.Value == 1
+        answer = questdlg(['Estimated TimTrack duration: ', num2str(est_duration), ' s, would you like to use parallel pool?'], 'Type of computation', 'Yes','No','Cancel','No');
+    elseif (est_duration > 60) && handles.do_parfor.Value == 0
+        answer = questdlg(['Estimated TimTrack duration: ', num2str(est_duration), ' s, would you like to use parallel pool?'], 'Type of computation', 'Yes','No','Cancel','Yes');
+    end
+    
+    if strcmp(answer, 'Yes')
+        handles.do_parfor.Value = 1;
+    elseif strcmp(answer, 'No')
+       handles.do_parfor.Value = 0;
+    elseif strcmp(answer,'Cancel')
+        return
+    end
+    
+    for i = 1:length(handles.Region)
+        % TimTrack (parfor or for)
+        if handles.do_parfor.Value
+            % Then construct a ParforProgressbar object:
+            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...:)');
+            
+            tstart = tic;
+            parfor f = frames             
+                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                WaitMessage.Send; %update waitbar parfor
+            end
+            WaitMessage.Destroy(); %update waitbar parfor
+            handles.ProcessingTime(1) = toc(tstart);
+            %         
+
+        else
+
+            tstart = tic;
+            hwb = waitbar(0,'','Name','Running TimTrack...:)');
+            for f = frames
+
+                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
+
+            end
+            close(hwb)
+            handles.ProcessingTime(1) = toc(tstart);
+        end
+
+       % Adjust the parameter of geofeat
+        for kk = 1:length(geofeatures)
+            geofeatures(kk).super_coef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+            geofeatures(kk).deep_coef(2) = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
+            geofeatures(kk).faslen = geofeatures(kk).faslen * handles.imresize_fac;
+        end
+
+        handles.geofeatures = geofeatures;
+
+    end
+end
+
+
+function[handles] = ROI_state_estimator(handles,frame_no,i,j)
 
 geofeatures = handles.geofeatures;
 
 n = handles.vidWidth;
 
 % Gains
-gf1 = handles.fasgain;
-gf2 = handles.posgain;
-ga = handles.apogain;
+g = handles.fcor / handles.FrameRate;
+g(g>1) = 1;
+g(g<0) = 0;
 
 % Hough estimate of vertical aponeurosis position
 ROIy_est = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
 
 % State estimation on ROI
-ROIy_cor = handles.Region(i).ROIy{frame_no} + ga * (ROIy_est - handles.Region(i).ROIy{frame_no});
+ROIy_cor = handles.Region(i).ROIy{frame_no} + g(1) * (ROIy_est - handles.Region(i).ROIy{frame_no});
 handles.Region(i).ROIy{frame_no} = ROIy_cor;
 
-super_apo = ROIy_cor([1,4]);
-deep_apo = ROIy_cor(2:3);
+function[handles] = state_estimator(handles,frame_no,i,j, direction)
 
-% fit first-orders on the correct ROI to interpolate and extrapolate
-super_coef = [diff(super_apo)/(n-1) super_apo(1)-diff(super_apo)/(n-1)];
-deep_coef = [diff(deep_apo)/(n-1) deep_apo(1)-diff(deep_apo)/(n-1)];
+geofeatures = handles.geofeatures;
 
-% Fascicle
-% Aponeurosis intersection points
+% Gains
+g = handles.fcor / handles.FrameRate;
+g(g>1) = 1;
+g(g<0) = 0;
+
+%% Get the current fascicle
+% Fascicle - Aponeurosis intersection points from optical flow
 x = handles.Region(i).Fascicle(j).fas_x{frame_no};
 y = handles.Region(i).Fascicle(j).fas_y{frame_no};
 
-% Current fascicle angle
+% Length and angle from optical flow
 alpha = atan2d(abs(diff(y)), abs(diff(x)));
+L = sqrt(diff(x).^2 + diff(y).^2);
 
-% Superficial aponeurosis intersection state estimation (correct wrt initial position)
+%% Superficial intersection drift estimate
+% With respect to the initial position
 x20 = handles.Region(i).Fascicle(j).fas_x{1}(2);
-x2_cor = x(2) + gf2*(x20 - x(2));
-y2_cor = y(2) + gf2*(polyval(super_coef,x2_cor) - y(2));
+dx2_drift = x(2) - x20;
 
-% Fascicle angle state estimation
-alpha_cor = alpha + gf1*(geofeatures(frame_no).alpha - alpha);
+% For vertical position, assume Hough is correct
+y20 = polyval(geofeatures(frame_no).super_coef, x20);
+dy2_drift = y(2) - y20;
 
-fas_coef(1) = -tand(alpha_cor);
-fas_coef(2) =  y2_cor - fas_coef(1) * x2_cor;
+%% Fascicle angle drift estimate
+dalpha_drift = alpha - geofeatures(frame_no).alpha;
 
-% Estimate deep intersections from corrected fascicle and deep aponeurosis
-x1_est = (fas_coef(2) - deep_coef(2)) / (deep_coef(1) - fas_coef(1));
-y1_est = polyval(deep_coef, x1_est);
+%% Deep intersection drift estimate
+% option 1: take length from TimTrack
+% L_TT = geofeatures(frame_no).faslen;
 
-% State estimation on fascicle length
-L = sqrt(diff([x(1) x2_cor]).^2 + diff([y(1) y2_cor]).^2); % length before Hough
-L_est = sqrt(diff([x1_est x2_cor]).^2 + diff([y1_est y2_cor]).^2); % corrected by aponeurosis
-L_cor = L + gf2*(L_est - L);
+% option 2: use the deep aponeurosis from TimTrack
+fas_coef(1) = -tand(alpha);
+fas_coef(2) =  y(2) - fas_coef(1) * x(2);
+x1_TT = (fas_coef(2) - geofeatures(frame_no).deep_coef(2)) / (geofeatures(frame_no).deep_coef(1) - fas_coef(1));
+y1_TT = polyval(geofeatures(frame_no).deep_coef, x1_TT);
+L_TT = sqrt(diff([x1_TT x(2)]).^2 + diff([y1_TT y(2)]).^2); % length before Hough
 
-% Deep aponeurosis intersections
-x1_cor = x2_cor - cosd(alpha_cor) * L_cor;
-y1_cor = y2_cor + sind(alpha_cor) * L_cor;
+% correct
+dL_drift = L - L_TT;
 
-handles.Region(i).Fascicle(j).fas_x{frame_no} = [x1_cor x2_cor];
-handles.Region(i).Fascicle(j).fas_y{frame_no} = [y1_cor y2_cor];
+%% Correct the drift
+% correction opposing the drift
+dx2_cor = -g(2) * dx2_drift;
+dy2_cor = -g(2) * dy2_drift;
+
+% length and angle
+alpha_cor   = -g(3) * dalpha_drift;
+L_cor       = -g(2) * dL_drift;
+
+% determine new lengh and angle to calculate deep correction
+alpha_new = alpha + alpha_cor; 
+L_new = L + L_cor;
+x2_new = x(2) + dx2_cor;
+y2_new = y(2) + dy2_cor;
+
+x1_new = x2_new - cosd(alpha_new) * L_new;
+y1_new = y2_new + sind(alpha_new) * L_new;
+
+% infer the correction
+dx1_cor = x1_new - x(1);
+dy1_cor = y1_new - y(1);
+
+if strcmp(direction,'forward') % apply to all frames in the future
+    for k = frame_no:handles.NumFrames
+        handles.Region(i).Fascicle(j).fas_x{k} = handles.Region(i).Fascicle(j).fas_x{k} + [dx1_cor dx2_cor];
+        handles.Region(i).Fascicle(j).fas_y{k} = handles.Region(i).Fascicle(j).fas_y{k} + [dy1_cor dy2_cor];
+    end
+    
+elseif strcmp(direction,'backward') % apply to all frames in the past
+    for k = frame_no:-1:1
+        handles.Region(i).Fascicle(j).fas_x{k} = handles.Region(i).Fascicle(j).fas_x{k} + [dx1_cor dx2_cor];
+        handles.Region(i).Fascicle(j).fas_y{k} = handles.Region(i).Fascicle(j).fas_y{k} + [dy1_cor dy2_cor];
+    end
+end
 
 % calculate the length and pennation for the current frame
 handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
@@ -2752,6 +2800,10 @@ handles.Region(i).Fascicle(j).fas_y{frame_no}(1) = handles.Region(i).Fascicle(j)
 handles.Region(i).Fascicle(j).fas_x{frame_no}(2) = handles.Region(i).Fascicle(j).current_xy(2,1);
 handles.Region(i).Fascicle(j).fas_y{frame_no}(2) = handles.Region(i).Fascicle(j).current_xy(2,2);
 
+% save the original (never changes)
+handles.Region(i).Fascicle(j).fas_x_original{frame_no} = handles.Region(i).Fascicle(j).fas_x{frame_no};
+handles.Region(i).Fascicle(j).fas_y_original{frame_no} = handles.Region(i).Fascicle(j).fas_y{frame_no};
+
 
 % --- Executes on button press in Auto_Detect.
 function Auto_Detect_Callback(hObject, eventdata, handles)
@@ -2786,19 +2838,22 @@ end
 
 %data = img(handles.crop_rect(2):(handles.crop_rect(2)+handles.crop_rect(4)-1), handles.crop_rect(1):(handles.crop_rect(1)+handles.crop_rect(3)-1));
 data = img;
-% adjust parameters from default
-parms = adjust_TimTrack_parms(parms);
+
+% don't use TimTrack's figure display, because we already have this GUI
+parms.show = 0;
+parms.fas.show = 0;
+
+% need to be more lenient for broad range of muscles
+parms.apo.deep.maxangle = 10;
 
 % some default parameters
 range = 15;
 
 % make range dependent on user-picked locations
-parms.apo.apox = round(linspace(1, size(data,2), 10));
 parms.apo.super.cut = [max(apRound(1)-range, 0), apRound(1)+range] / 100;
 parms.apo.deep.cut = [apRound(2)-range, min(apRound(2)+range, 100)] / 100;
 
 % run TimTrack
-parms.extrapolation = 1;
 [geofeatures, ~, parms] = auto_ultrasound(data, parms);
 
 handles.parms = parms;
@@ -2815,6 +2870,9 @@ Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
 
 handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
 handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
+
+handles.Region.Fascicle.fas_x_original{frame_no} = handles.Region.Fascicle.fas_x{frame_no};
+handles.Region.Fascicle.fas_y_original{frame_no} = handles.Region.Fascicle.fas_y{frame_no};
 
 handles.Region(i).ROIx{frame_no} = [1 1 n n 1]';
 handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) polyval(geofeatures.deep_coef, [1 n]) polyval(geofeatures.super_coef, [n 1])])';
@@ -2844,138 +2902,6 @@ guidata(hObject, handles);
 show_image(hObject,handles)
 
 
-function[parms] = adjust_TimTrack_parms(parms)
-
-%parms.ROI = [239   936; 50   608]; % [0812]
-parms.extrapolation = 0;
-parms.fas.thetares = .5;
-
-parms.apo.deep.cut(1) = .35;
-parms.apo.super.cut(1) = .03;
-
-parms.show = 0;
-parms.fas.show = 0;
-parms.redo_ROI = 0;
-
-parms.apo.deep.maxangle = 10;
-
-% function plot_data(hObject,handles)
-%
-% axes(handles.mat_plot); cla;
-%
-% plot([0 1], [0 1])
-%
-% guidata(hObject,handles);
-
-
-% --- Function to plot the data variables from spike mat, c3d or biodex dat
-% file
-% function plot_data(hObject,handles)
-%
-% if isfield(handles,'D')
-%
-%     % determine the variables highlighted in list
-%     cur_var = get(handles.variable_list,'Value');
-%
-%
-%     frame_no = round(get(handles.frame_slider,'Value'));
-%     frametime = handles.Time(frame_no+handles.start_frame-1);
-%
-%     axes(handles.mat_plot); cla;
-%
-%     % define the colours to plot
-%     %col = {'b','k','r','g','y','m','k'};
-%
-%     hold on;
-%
-%     % plot the data in the selected cells against their corresponding time
-%     % cell
-%     cellfun(@plot,{handles.D(cur_var).time},{handles.D(cur_var).value});%,col(1:length(cur_var)));
-%
-%     % make plot legend - note some variable have more than one plot in them
-%     % and therefore we need to take this into account
-%     % only put legend on plot if the legend check box is true
-%     if get(handles.legend_check,'Value')
-%         cur_legend = [];
-%         for i = 1:length(cur_var)
-%             for j = 1:size(handles.D(cur_var(i)).value,2)
-%                 if strcmp(handles.D(cur_var(i)).type,'Marker')
-%                     switch j
-%                         case 1
-%                             M = 'X';
-%                         case 2
-%                             M = 'Y';
-%                         case 3
-%                             M = 'Z';
-%                     end
-%                     cur_legend = [cur_legend {[handles.D(cur_var(i)).name ' ' M]}];
-%                 else cur_legend = [cur_legend {handles.D(cur_var(i)).name}];
-%                 end
-%                 y_range = get(handles.mat_plot,'YLim');
-%                 [frametimeVar,frameVar] = min(abs(frametime - handles.D(cur_var(i)).time));
-%                 text(handles.D(cur_var(i)).time(frameVar)+0.2,handles.D(cur_var(i)).value(frameVar,j),...
-%                     num2str(handles.D(cur_var(i)).value(frameVar,j)),...
-%                     'FontSize',10,'FontWeight','bold');
-%             end
-%         end
-%         legend(cur_legend)
-%     else legend off
-%     end
-%
-%     if isfield(handles,'c3d_events')
-%
-%         elist = get(handles.EventList,'String');
-%         enum  = get(handles.EventList,'Value');
-%         cur_ev = elist{enum}; %ultrasound_tracking_v2_5
-%         eventT = handles.c3d_events.(cur_ev);
-%
-%         y_vals = get(handles.mat_plot,'YLim');
-%         for k = 1:length(eventT)
-%             eplot{k} = plot([eventT(k),eventT(k)],y_vals,':','Color',[0.4 0.4 0.4]);
-%         end
-%
-%
-%     end
-%
-%
-%     hold off;
-%
-%     guidata(hObject,handles);
-%
-% % end
-%
-% function handles = detect_ROIs(handles,frame_no,i,j)
-%
-% % if ~isnan(handles.ApoDetect_frames(1))
-% %     if any(handles.ApoDetect_frames == frame_no)
-%
-% parms.apo.frangi = [18 20];
-% parms.apo.apox = round(linspace(1, handles.vidWidth, 10));
-%
-% parms.apo.method = 'Hough';
-% parms.apo.th = 0.5;
-% parms.apo.show = 0;
-%
-% parms.apo.deep.cut = handles.Hough.apo.deep.cut;
-% parms.apo.super.cut = handles.Hough.apo.super.cut;
-%
-% parms.fas.filter = 0;
-%
-% % filter and fit aponeurosis
-% [~, super_obj, deep_obj] = filter_usimage(handles.NIm,parms);
-% super_coef = polyfit(parms.apo.apox,super_obj, 1);
-% deep_coef = polyfit(parms.apo.apox,deep_obj, 1);
-%
-% % optional: fix to edges
-% APOROI(:,1) = [1; 1; handles.vidWidth+1; handles.vidWidth+1; 1];
-%
-% % make sure ROIs are on aponeuroses
-% APOROI([2,3],2) = polyval(deep_coef, APOROI([2,3],1));
-% APOROI([1,4,5],2) = polyval(super_coef, APOROI([1,4,5],1));
-%
-% [handles.Region(i).APOROI{frame_no},handles.Region(i).APOROIx{frame_no}, handles.Region(i).APOROIy{frame_no}] = roipoly(handles.NIm, APOROI(:,1),APOROI(:,2));
-
-
 function gain_Callback(hObject, eventdata, handles)
 % hObject    handle to gain (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -2983,10 +2909,14 @@ function gain_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of gain as text
 %        str2double(get(hObject,'String')) returns contents of gain as a double
-handles.fasgain = str2double(get(hObject,'String'));
+
+handles.fcor(3) = str2double(get(hObject,'String')); % [Hz]
 
 % Update handles structure
 guidata(hObject, handles);
+
+% Run state estimation
+do_state_estimation(hObject, eventdata, handles)
 
 % --- Executes during object creation, after setting all properties.
 function gain_CreateFcn(hObject, eventdata, handles)
@@ -3000,7 +2930,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-handles.fasgain = str2double(get(hObject,'String'));
+handles.fcor(3) = str2double(get(hObject,'String')); % [Hz]
 
 % Update handles structure
 guidata(hObject, handles);
@@ -3015,29 +2945,43 @@ function do_parfor_Callback(hObject, eventdata, handles)
 handles.do_parfor = get(hObject,'Value');
 
 
-% --- Executes on button press in do_state_estimation.
-function do_state_estimation_Callback(hObject, eventdata, handles)
+function do_state_estimation(hObject, eventdata, handles)
 % hObject    handle to do_state_estimation (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-
-for f = 2:get(handles.frame_slider,'Max')
+% start with the original
+for f = 1:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
         for j = 1:length(handles.Region(i).Fascicle)
+            handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
+            handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
+        end
+    end
+end
 
-            % optical flow
-            handles = apply_transform(handles,f,f-1,i,j);
-
+% forward state estimation
+for f = 1:get(handles.frame_slider,'Max')
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
             % state estimation
-            handles = state_estimator(handles,f,i,j);
+            handles = state_estimator(handles,f,i,j,'forward');
+        end
+    end
+end
+
+% backward state estimation
+for f = get(handles.frame_slider,'Max'):-1:1
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
+            % state estimation
+            handles = state_estimator(handles,f,i,j,'backward');
         end
     end
 end
 
 show_data(hObject, handles)
 guidata(hObject, handles);
-
 
 % --- Executes on button press in flipimage.
 function flipimage_Callback(hObject, eventdata, handles)
@@ -3085,10 +3029,17 @@ function apo_gain_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of apo_gain as text
 %        str2double(get(hObject,'String')) returns contents of apo_gain as a double
 
-handles.apogain = str2double(get(hObject,'String'));
+handles.fcor(1) = str2double(get(hObject,'String'));
+
+% Run optical flow
+handles = process_all_UltraTrack(hObject, eventdata, handles);
 
 % Update handles structure
 guidata(hObject, handles);
+
+% Show image
+show_image(hObject,handles)
+
 
 % --- Executes during object creation, after setting all properties.
 function apo_gain_CreateFcn(hObject, eventdata, handles)
@@ -3101,7 +3052,8 @@ function apo_gain_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-handles.apogain = str2double(get(hObject,'String'));
+
+handles.fcor(1) = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
@@ -3115,10 +3067,14 @@ function pos_gain_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of pos_gain as text
 %        str2double(get(hObject,'String')) returns contents of pos_gain as a double
-handles.posgain = str2double(get(hObject,'String'));
+
+handles.fcor(2) = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
+
+% Run state estimation
+do_state_estimation(hObject, eventdata, handles)
 
 
 % --- Executes during object creation, after setting all properties.
@@ -3133,7 +3089,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-handles.posgain = str2double(get(hObject,'String'));
+handles.fcor(2) = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
@@ -3194,3 +3150,37 @@ delete(gcp('nocreate'));
 disp('Parallel pool shutted down!');
 % Hint: delete(hObject) closes the figure
 delete(hObject);
+
+
+
+function resize_fac_Callback(hObject, eventdata, handles)
+% hObject    handle to resize_fac (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of resize_fac as text
+%        str2double(get(hObject,'String')) returns contents of resize_fac as a double
+
+handles.imresize_fac = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function resize_fac_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to resize_fac (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.imresize_fac = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
