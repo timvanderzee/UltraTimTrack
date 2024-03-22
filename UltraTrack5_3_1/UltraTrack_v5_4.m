@@ -21,7 +21,7 @@ function varargout = UltraTrack_v5_4(varargin)
 
 % Edit the above text to modify the response to help UltraTrack_v5_4
 
-% Last Modified by GUIDE v2.5 22-Feb-2024 11:23:02
+% Last Modified by GUIDE v2.5 07-Mar-2024 14:41:55
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -31,6 +31,7 @@ gui_State = struct('gui_Name',       mfilename, ...
     'gui_OutputFcn',  @UltraTrack_v5_4_OutputFcn, ...
     'gui_LayoutFcn',  [] , ...
     'gui_Callback',   []);
+
 if nargin && ischar(varargin{1})
     gui_State.gui_Callback = str2func(varargin{1});
 end
@@ -40,8 +41,8 @@ if nargout
 else
     gui_mainfcn(gui_State, varargin{:});
 end
-% End initialization code - DO NOT EDIT
 
+% End initialization code - DO NOT EDIT
 
 % --- Executes just before UltraTrack_v5_4 is made visible.
 function UltraTrack_v5_4_OpeningFcn(hObject, eventdata, handles, varargin)
@@ -50,6 +51,9 @@ function UltraTrack_v5_4_OpeningFcn(hObject, eventdata, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to UltraTrack_v5_4 (see VARARGIN)
+
+% Check if Parallel Computing Toolbox is installed
+chkParallelToolBox(); %if exists it runs infinitely till Ultratimtrack is closed
 
 % Choose default command line output for UltraTrack_v5_4
 handles.output = hObject;
@@ -690,7 +694,8 @@ if isfield(handles,'ImStack')
     handles.Region(i).Fascicle(j).fas_y{frame_no}(1) = p1(2);
     handles.Region(i).Fascicle(j).fas_y{frame_no}(2) = p2(2);
 
-    if handles.Region(i).Fascicle(j).fas_y{frame_no}(1) > handles.Region(i).Fascicle(j).fas_y{frame_no}(2)
+    % %%adjust this ???
+    if handles.Region(i).Fascicle(j).fas_y{frame_no}(1) < handles.Region(i).Fascicle(j).fas_y{frame_no}(2)
         handles.Region(i).Fascicle(j).fas_y{frame_no} = fliplr(handles.Region(i).Fascicle(j).fas_y{frame_no});
         handles.Region(i).Fascicle(j).fas_x{frame_no} = fliplr(handles.Region(i).Fascicle(j).fas_x{frame_no});
     end
@@ -706,7 +711,8 @@ if isfield(handles,'ImStack')
 
     if ~isfield(handles.Region(i).Fascicle(j),'analysed_frames')
         handles.Region(i).Fascicle(j).analysed_frames = frame_no;
-    else handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
+    else 
+        handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
     end
 
     show_image(hObject,handles)
@@ -765,7 +771,10 @@ if isfield(handles,'ImStack')
     cla(handles.length_plot) %clean fascicle length data
     cla(handles.mat_plot)%clean fascicle angle data
     
-    cla(handles.axes1) %clean image data
+    cla(handles.axes1) %clean image data    
+    set(handles.axes1)
+    axis tight %first center the image
+    axis auto 
     show_image(hObject,handles)
 end
 
@@ -906,7 +915,28 @@ Im = handles.ImStack(:,:,1);
 
 handles.vidHeight = size(Im,1);
 
-% added by Tim
+%corners = detectAutoCrop(handles.movObj);
+handles.crop_rect = detectAutoCrop2(handles.ImStack,handles.movObj.FrameRate/2);
+handles.ImStackOr = handles.ImStack; %back up original
+    %tmp = zeros(size(handles.ImStack));
+
+    %Crop all images before updating
+    for ii = 1 : handles.NumFrames
+        tmp(:,:,ii) = imcrop(handles.ImStack(:,:,ii),handles.crop_rect);
+    end
+
+    handles.ImStack = tmp; %overwrite the one used thourghout the script
+    handles.vidHeight = handles.crop_rect(4);
+    handles.vidWidth = handles.crop_rect(3);
+    clearvars tmp
+    % Clean axis from original image and tight axis on the cropped image
+    cla
+    % update the image axes using show_image function (bottom)
+    show_image(hObject,handles)
+    axis tight
+
+%{ 
+added by Tim
 % gIm = imbinarize(imgradient(Im));
 gIm = imbinarize(mean(diff(handles.ImStack,3),3));
 
@@ -955,6 +985,8 @@ end
 handles.vidHeight = handles.crop_rect(4);
 handles.vidWidth = handles.crop_rect(3);
 
+%}
+
 %%
 
 % % work out how to trim the edges of the ultrasound (edges are intensity value of
@@ -986,17 +1018,31 @@ function menu_crop_image_Callback(hObject, eventdata, handles)
 if isfield(handles,'ImStack')
 
     % define current axes
-    axes(handles.axes1)
+    set(handles.axes1)
+    %axes(handles.axes1)
 
     % use imcrop tool to determine croppable area
-    [~,handles.crop_rect] = imcrop;
+    [~,handles.crop_rect] = imcrop(handles.axes1);
 
     handles.crop_rect = round(handles.crop_rect);
     handles.vidHeight = handles.crop_rect(4);
     handles.vidWidth = handles.crop_rect(3);
+    
+    handles.ImStackOr = handles.ImStack; %back up original
+    %tmp = zeros(size(handles.ImStack));
 
+    %Crop all images before updating
+    for ii = 1 : handles.NumFrames
+        tmp(:,:,ii) = imcrop(handles.ImStack(:,:,ii),handles.crop_rect);
+    end    
+   
+    handles.ImStack = tmp; %overwrite the one used thourghout the script
+    clearvars tmp
+    % Clean axis from original image and tight axis on the cropped image
+    cla
     % update the image axes using show_image function (bottom)
     show_image(hObject,handles)
+    axis tight
 
 end
 
@@ -1009,8 +1055,8 @@ function menu_reset_image_Callback(hObject, eventdata, handles)
 if isfield(handles,'ImStack')
 
     % set the image croppable area to the maximum area
-    handles.crop_rect = [1 1 handles.vidWidth handles.vidHeight];
-
+    %handles.crop_rect = [1 1 handles.vidWidth handles.vidHeight];
+    handles.ImStack = handles.ImStackOr; %restore original image
     % update the image axes using show_image function (bottom)
     show_image(hObject,handles)
 
@@ -1228,10 +1274,6 @@ if isfield(handles,'ImStack')
 
 
     show_image(hObject,handles)
-
-
-
-
 
 end
 
@@ -1683,6 +1725,12 @@ if isfield(handles,'Region')
             TrackingData.start_frame = handles.start_frame;
             TrackingData.res = handles.ID;
             TrackingData.NumFrames = handles.NumFrames;
+            %info about tracking for replication purposes
+            TrackingData.ProcessingTime = handles.ProcessingTime; %two
+            TrackingData.BlockSize = handles.BlockSize;
+            TrackingData.Gains = [handles.apogain handles.posgain handles.fasgain];
+            TrackingData.Parallel = handles.do_parfor.Value;
+            TrackingData.info = "Processing [TimTrack; Opticflow], %%\nBlockSize [width; height], %%\nGains [Apo, Position, Angle]";
 
             if isfield(handles.Region(i),'fas_length_corr') && ~isempty(handles.Region(i).fas_length_corr)
                 Fdat.Region(i).FL = handles.Region(i).fas_length_corr(nz,:)';
@@ -1703,8 +1751,6 @@ if isfield(handles,'Region')
                 Fdat.Region(i).PEN = handles.Region(i).fas_pen(nz,:)';
                 Fdat.Region(i).Time = time(nz);
             end
-
-
 
         end
     end
@@ -1891,13 +1937,34 @@ guidata(hObject,handles);
 
 %set(gcf,'DoubleBuffer','on')
 
-% cla(handles.axes1)
+% cla(handles.axes1) 
+%not sure this is necessary, if the fascicle is smaller the image (i.e. no
+%extrapolation), it is not nice to see
 
 for i = 1:end_frame
     x(i,:) = handles.Region.Fascicle.fas_x{i};
+    y(i,:) = handles.Region.Fascicle.fas_y{i};
 end
+%initiliaze them
+lim_x = [0, handles.vidWidth];
+lim_y = [0, handles.vidHeight];
+%x axis adjustment
+if min(x(:)) < 0
+    lim_x(1) = min(x(:));
+end
+if max(x(:)) > handles.vidWidth
+    lim_x(2) = max(x(:));
+end
+%y axis adjustment
+if min(y(:)) < 0
+    lim_y(1) = min(y(:));
+end
+if max(y(:)) > handles.vidHeight
+    lim_y(2) = max(y(:));
+end
+%set(handles.axes1,'XLim', [0 -abs(min(x(:))) handles.vidWidth + max(x(:))],'YLim', [min(y(:)) max(y(:))])
+set(handles.axes1,'XLim', lim_x,'YLim', lim_y);
 
-set(handles.axes1,'XLim', [min(x(:)) max(x(:))])
 
 for f = frame_no:end_frame
     %    profile on
@@ -2172,7 +2239,7 @@ handles.Vidax_Y = ny;
 % Update handles structure
 guidata(hObject, handles);
 
-
+% --- Executes on value changed 
 function ImDepthEdit_Callback(hObject, eventdata, handles)
 % hObject    handle to ImDepthEdit (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -2180,7 +2247,24 @@ function ImDepthEdit_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of ImDepthEdit as text
 %        str2double(get(hObject,'String')) returns contents of ImDepthEdit as a double
+scalarOld = handles.ID;
 handles.ID = str2double(get(handles.ImDepthEdit,'String'));
+
+for i = 1:length(handles.Region)
+    if isfield(handles.Region(i),'Fascicle')
+        if isfield(handles.Region(i),'fas_length')
+            
+            if ~isempty(handles.Region(i).fas_length)
+                FL = handles.Region(i).fas_length;
+                FL = FL ./ scalarOld;
+                FL = FL .* handles.ID; 
+                handles.Region(i).fas_length = FL;
+            end
+        end
+        show_data(hObject, handles); %update plots
+    end
+end
+
 % Update handles structure
 guidata(hObject, handles);
 
@@ -2280,6 +2364,7 @@ if isfield(handles,'ImStack')
 
         else
             set(handles.image, 'CData',Im);
+            axes(handles.axes1)            
         end
 
 
@@ -2385,14 +2470,15 @@ if isfield(handles,'ImStack')
     % find current frame number from slider
     frame_no = round(get(handles.frame_slider,'Value'));
 
-    h = waitbar(0,'Please wait while processing forward...');
+    h = waitbar(0,'Please wait while processing forward...','Name','Running Opticflow...');
 
     for i = 1:length(handles.Region)
 
-        for f = frames
-            im2(:,:,f) = imcrop(handles.ImStack(:,:,f),handles.crop_rect);
-        end
-
+        % NOT NEEDED as image are already cut
+        % for f = frames
+        %     im2(:,:,f) = imcrop(handles.ImStack(:,:,f),handles.crop_rect);
+        % end
+        %im2 = handles.ImStack; % --> waste of memory
         % Feel free to increase this even higher and see other progress monitors fail.
         numIterations = length(frames);
 
@@ -2402,75 +2488,58 @@ if isfield(handles,'ImStack')
         % TimTrack (parfor or for)
         if handles.do_parfor.Value
             % Then construct a ParforProgressbar object:
-            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'FileName','Running TimTrack...');
+            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...:)');
             
-            tic
+            tstart = tic;
             parfor f = frames
                 %@Tim: resize image to downsample the uint8 matrix and less
                 %time process in Tim track
                 % --> geofeatuers(f) = auto_ultrasound(imresize(im2(:,:,f),0.5),parms);
               
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = auto_ultrasound(handles.ImStack(:,:,f), parms);
                 WaitMessage.Send; %update waitbar parfor
 
             end
             WaitMessage.Destroy(); %update waitbar parfor
-            toc
-            %
-
-            %tic
-            % Initialize the parallel pool
-            % poolobj = gcp('nocreate'); % Check if a pool is already open
-            % if isempty(poolobj)
-            %     parpool('local', maxNumCompThreads); % Specify workers as the max number of threads avaialbe
-            % end
-            % 
-            % 
-            % % Create a batch job
-            % bau = parcluster("Processes");
-            % batchJob = createJob(bau);
-            % 
-            % % Add tasks to the job
-            % for f = frames
-            %     createTask(batchJob, @auto_ultrasound, 1, {im2(:,:,f), parms});
-            % end
-            % 
-            % % Submit the job for execution
-            % submit(batchJob);
-            % 
-            % % Wait for the job to finish
-            % wait(batchJob);
-            % 
-            % % Retrieve results
-            % results = fetchOutputs(batchJob);
-            % 
-            % % Close the parallel pool
-            % delete(poolobj);
-
-            %% 2nd batch? Create a batch job
-            %myJob = batch('auto_ultrasound', 1, {im2, parms});
-            
-            % Wait for the job to finish
-            %wait(myJob);
-            
-            % Retrieve the results
-            %results = fetchOutputs(myJob);
-            
-            % Cleanup
-            %delete(myJob);
-
-            %toc
-            
+            handles.ProcessingTime(1) = toc(tstart);
+            %         
 
         else
+
+            % res_val = 2;
+            % bau = parms; %bau is just the fanciest name you can give to
+            % any variable :)
+            % bau.apo.apox =  floor(bau.apo.apox/res_val);
+            % bau.apo.x = bau.apo.x /res_val;
+            % bau.fas.Emask = imresize(bau.fas.Emask, (1/res_val) );
+            % bau.fas.Emask_radius = bau.fas.Emask_radius ./ res_val;
+            % bau.ROI = floor(bau.ROI / res_val);
+            tstart = tic;
+            hwb = waitbar(0,'','Name','Running TimTrack...:)');
             for f = frames
                 %@Tim: resize image to downsample the uint8 matrix and less
                 %time process in Tim track
-                % --> geofeatuers(f) = auto_ultrasound(imresize(im2(:,:,f),0.5),parms);
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
-                disp(f)
+                % --> 
+                
+                %geofeatures(f) = auto_ultrasound(imresize(im2(:,:,f), 1/res_val),bau);
+                geofeatures(f) = auto_ultrasound(handles.ImStack(:,:,f), parms);
+                %disp(f)
+                waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
+
             end
+            close(hwb)
+            handles.ProcessingTime(1) = toc(tstart);
         end
+
+%        Adjust the parameter of geofeat
+        % for kk = 1:length(geofeatures)
+        %     geofeatures(kk).thickness = geofeatures(kk).thickness * res_val;
+        %     geofeatures(kk).faslen = geofeatures(kk).faslen * res_val;
+        %     geofeatures(kk).fat_thickness = geofeatures(kk).fat_thickness * res_val;
+        %     geofeatures(kk).super_coef = geofeatures(kk).super_coef * res_val;
+        %     geofeatures(kk).deep_coef = geofeatures(kk).deep_coef * res_val;
+        % 
+        % end
 
         handles.geofeatures = geofeatures;
 
@@ -2498,8 +2567,24 @@ if isfield(handles,'ImStack')
     %
     % points = selectedPoints;
 
-    %% Initialize point tracker
-    pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[81 81]);
+    %% Initialize point tracker and run opticflow
+    tstart = tic;
+    %calculate block size according to ROI 
+    width = floor(max(abs(diff(handles.ROI.XData))) * 0.20);
+    height = floor(max(abs(diff(handles.ROI.YData))) * 0.40); %thickness changes?
+
+    handles.BlockSize = [width height]; %save as width and height for later comparison
+
+    % Ensure width and height are both odd numbers
+    if mod(width, 2) == 0
+        width = width + 1; % Increment by 1 to make it odd
+    end
+    
+    if mod(height, 2) == 0
+        height = height + 1; % Increment by 1 to make it odd
+    end
+
+    pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[height width]);
     %             pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
     initialize(pointTracker,points,im1);
 
@@ -2533,7 +2618,7 @@ if isfield(handles,'ImStack')
 
         end
 
-        %                 profile viewer
+        % profile viewer
         waitbar((f+(get(handles.frame_slider,'Max')*(i-1)))/...
             (get(handles.frame_slider,'Max')*length(handles.Region)),h)
     end
@@ -2544,12 +2629,13 @@ if isfield(handles,'ImStack')
 
 end
 close(h)
+handles.ProcessingTime(2) = toc(tstart);
 
 % Update handles structure
 guidata(hObject, handles);
 
 % update the image axes using show_image function (bottom)
-show_image(hObject,handles)
+%show_image(hObject,handles)
 
 show_data(hObject, handles)
 
@@ -2673,7 +2759,7 @@ function Auto_Detect_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% add TimTrack to path and load TimTrack parameters
+% add 3 to path and load TimTrack parameters
 %     ccd = cd;
 %     cd(handles.TimTrackfolder.String)
 %     addpath(genpath(cd));
@@ -2698,8 +2784,8 @@ for jj = 1:2
     apRound(jj) = round(apCentre,-1);
 end
 
-data = img(handles.crop_rect(2):(handles.crop_rect(2)+handles.crop_rect(4)-1), handles.crop_rect(1):(handles.crop_rect(1)+handles.crop_rect(3)-1));
-
+%data = img(handles.crop_rect(2):(handles.crop_rect(2)+handles.crop_rect(4)-1), handles.crop_rect(1):(handles.crop_rect(1)+handles.crop_rect(3)-1));
+data = img;
 % adjust parameters from default
 parms = adjust_TimTrack_parms(parms);
 
@@ -2717,21 +2803,21 @@ parms.extrapolation = 1;
 
 handles.parms = parms;
 
-frame_no = 1;
+%frame_no = 1;
 
 n = handles.vidWidth;
 i = 1; j = 1;
 
-Deep_intersect_x = round((geofeatures(frame_no).deep_coef(2) - geofeatures(frame_no).fas_coef(2))   ./ (geofeatures(frame_no).fas_coef(1) - geofeatures(frame_no).deep_coef(1)));
-Super_intersect_x = round((geofeatures(frame_no).super_coef(2) - geofeatures(frame_no).fas_coef(2)) ./ (geofeatures(frame_no).fas_coef(1) - geofeatures(frame_no).super_coef(1)));
-Super_intersect_y = polyval(geofeatures(frame_no).super_coef, Super_intersect_x);
-Deep_intersect_y = polyval(geofeatures(frame_no).deep_coef, Deep_intersect_x);
+Deep_intersect_x = round((geofeatures.deep_coef(2) - geofeatures.fas_coef(2))   ./ (geofeatures.fas_coef(1) - geofeatures.deep_coef(1)));
+Super_intersect_x = round((geofeatures.super_coef(2) - geofeatures.fas_coef(2)) ./ (geofeatures.fas_coef(1) - geofeatures.super_coef(1)));
+Super_intersect_y = polyval(geofeatures.super_coef, Super_intersect_x);
+Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
 
-handles.Region.Fascicle.fas_x{1} = [Deep_intersect_x Super_intersect_x];
-handles.Region.Fascicle.fas_y{1} = [Deep_intersect_y Super_intersect_y];
+handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
+handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
 
 handles.Region(i).ROIx{frame_no} = [1 1 n n 1]';
-handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
+handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) polyval(geofeatures.deep_coef, [1 n]) polyval(geofeatures.super_coef, [n 1])])';
 
 for i = 1:size(handles.Region,2)
     handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no};handles.Region(i).Fascicle(j).fas_y{frame_no}]';
@@ -2760,7 +2846,7 @@ show_image(hObject,handles)
 
 function[parms] = adjust_TimTrack_parms(parms)
 
-parms.ROI = [239   936; 50   608]; % [0812]
+%parms.ROI = [239   936; 50   608]; % [0812]
 parms.extrapolation = 0;
 parms.fas.thetares = .5;
 
@@ -2986,7 +3072,6 @@ end
 %if handles.flipimage 
 handles.ImStack = flip(handles.ImStack, 2);
 %end
-
 guidata(hObject, handles);
 show_image(hObject,handles)
 
@@ -3054,6 +3139,8 @@ handles.posgain = str2double(get(hObject,'String'));
 guidata(hObject, handles);
 
 
+% --- Function to calculate euclidean distance form the fascicle line and
+% the featuers points to keep around that fascicle (NOT USED NOW)
 function distances = pointToLineDistance(points, line)
     % Calculate distance between each point and the line
     x1 = line(1, 1);
@@ -3063,3 +3150,47 @@ function distances = pointToLineDistance(points, line)
 
     distances = abs((y2 - y1) * points(:, 1) - (x2 - x1) * points(:, 2) + x2 * y1 - y2 * x1) / sqrt((y2 - y1)^2 + (x2 - x1)^2);
 
+% --- Function to check whether ParallelToolbox exists and run it
+function chkParallelToolBox()
+% First checks if Parallel Computing Toolbox exists and then
+% Returns num of workers available for executing parallel computing
+
+available_toolboxes = ver;
+isexist_ParallelToolBox = false;
+
+% Check if Parallel Computing Toolbox exists
+for index = 1:size(available_toolboxes, 2)
+    if convertCharsToStrings(available_toolboxes(index).Name) == "Parallel Computing Toolbox"
+        isexist_ParallelToolBox = true;
+        break;
+    end
+end
+
+% If Parallel Computing Toolbox is available, start it if not already running
+if isexist_ParallelToolBox
+    if isempty(gcp('nocreate')) %if parallel is not running yet, start it
+    myCluster = parcluster('Processes');
+
+    % Function to start the Parallel Computing Toolbox pool
+    disp('Parallel Computing Toolbox exists and it will be opened...');
+    % Open parallel pool with no idle timeout
+    parpool(myCluster, 'IdleTimeout', Inf);
+    else
+        disp('Parpool is already running!')
+    end
+
+end
+
+
+% --- Executes when user attempts to close figure1 (i.e., using the close icon
+% to close the GUI)
+function figure1_CloseRequestFcn(hObject, eventdata, handles)
+% hObject    handle to figure1 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Check if Parallel Computing Toolbox is running and shut it down
+delete(gcp('nocreate'));
+disp('Parallel pool shutted down!');
+% Hint: delete(hObject) closes the figure
+delete(hObject);

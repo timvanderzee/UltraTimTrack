@@ -1,4 +1,4 @@
-## Updates up to 6th March 2024 
+## Updates regarding Ultratimtrack
 
 Changes
 
@@ -39,10 +39,60 @@ In general, gains 1 and 2 should depend on the quality of the aponeurosis-parts 
 
 ## To do
 
-- [ ] Auto cropping of US image/video
-- [ ] Downsample image (by 2 maybe?) for Timtrack --> @Tim checks lines 2410 and 2467. I put a hint
+- [x] Auto cropping  --> fuck off
+- [x] Manual cropping (add that it saves original images in case someone wants to reset)
+- THERE IS AN ISSUE WITH CROPPING IN GENERAL...like the fascicle goes to the stars and the ROI moves
+- [ ] Downsample image (by 2 maybe?) --> @Tim checks lines 2410 and 2467. I put a hint
+	- [ ] Normal size: 145.267776 seconds (599 frames)
+	- [ ] Half size:  72.574186 seconds --> just tim needs to check and correct the output because I don't know all of them, which needs to be x2 again
 - [x] Block size 81 81 
-- [ ] Define a block size based on the muscle ROI created by "Define fascicle" ?
-- [ ] Open parfor at the beginning and keep open till 
-- [ ] TVD2All --> check cutting pixels
-- [ ] Play around and find bugs :D
+- [x] Define a block size based on the muscle ROI.
+
+In Lucas-Kanade and Tomasi's optical flow method, the block size refers to the size of the neighborhood around each pixel that is considered when estimating the motion. The block size plays a crucial role in the accuracy and sensitivity of the optical flow estimation.
+
+Choosing a suitable block size depends on the characteristics of the images you are processing and the expected motion in the scene. Here are some guidelines to help you define a good block size:
+
+1. **Spatial Resolution:** Consider the spatial resolution of your images. If your images have a high spatial resolution, you might be able to use a larger block size. Conversely, for lower-resolution images, a smaller block size may be more appropriate.
+
+2. **Motion Scale:** Take into account the scale of the expected motion in your scene. If the motion is expected to be large, a larger block size may be suitable. Conversely, for small-scale motion, a smaller block size might be more accurate.
+
+3. **Computational Cost:** Larger block sizes generally result in more computation because more pixels are involved in the estimation process. If computational efficiency is crucial, you might need to balance accuracy and speed by choosing a moderate block size.
+
+4. **Image Content:** Consider the content of your images. If there are distinct features or structures in the scene, a larger block size may capture more information. However, if the scene is relatively uniform or lacks clear features, a smaller block size might be more appropriate.
+
+5. **Noise Sensitivity:** Smaller block sizes tend to be more sensitive to noise, while larger block sizes may provide a more robust estimation by averaging over a larger area. If your images have significant noise, you may want to choose a block size that balances noise sensitivity and accuracy.
+
+Ultimately, the choice of block size may require some experimentation and testing with your specific application and dataset. It's common to try different block sizes and evaluate their impact on the optical flow results to determine the most suitable size for your particular scenario.
+- [x] Make parfor auto open in the begingging 
+- [x] Make parfor to last as long as UTT is running and close it as soon as UTT is closed
+- [x] Parallel branch and branch to the main branch
+- [ ] TVD2All --> resolution issue?!!!!
+- [x] Play around :D
+- [x] Add that if someone change scale it recalculate fascicles length (line 2194)
+- [x] Adjust waitbars name (edit function parfor_wait)
+- [x] Adjust that clear fascicle callback, clean up the image, center it again and then make the axis again auto to adjust to the fascicle line extrapolated
+- [x] Adjust the video play according to absolute values of fascicle extrap and image size (line 1922)
+
+## Updates 21-03-2025 
+
+- [x] Autodetect works only at frame 1-->handles.Region(i).Fascicle(j).fas_x{frame_no} must be initialized as empty
+- [x] OR line2795 frame_no = 1 and geofeatuer at frame_no not necessary as it was a local variable for the selected frame
+- [x] Changing resolution in the text box automatically adjust the fascicle length plot data
+- [ ] opticflow is made to run only forward from frame n=1. While tim track is fine because each frame is independent, opticflow maybe be useful to go backwards as final fascicle length is the same so we have the opportunity to track the same one (rFE/rFD/REF) or also because the detected fascicle is not the best at frame 1 but maybe it is clear at frame 53 for example. 
+- [x] When I use define fascicle, it looks like it plots outside (in the negative part or all x becomes negative)...basically the manually defined one is correct, the others tracked are shit. Maybe there is a fliplr issue?  --> it was the fucking fliplr
+	-Just need to check whether it works for deeper compartment
+- [ ] define tracking roi doesn't work
+- [ ] if tim track fails, everything fails --> add a button or rather initialize the var so state_estimator use 0 / nan
+- [x] **FIX WHY TIMTRACK WAS FAILING: line 2473 (not necessary to crop again the image, especially when autocrop works...it cut out part of the superficial aponeurosis and then tim track failed to catch the apo).** 
+- [ ] Adjust tim track parm (2834???) should we keep it?  --> It seems you call the function "adjust_timtrack_parm", I just left it there...
+- [x] When I apply the estimator, the beginning gets fucked (see images) --> maybe because of that ROI cut, it should be fixed now
+- [ ] A message box that check tic toc of a single frame of timtrack and then chose to do the parfor or not based on the number of frames...
+- [ ] Sensitivity analysis
+- [ ] Tic toc a single frame for then time waitbar
+- [x] Save timing of analysis (tim track, opticflow, paralell 1 or 0 in the mat data)
+- [x] Save gains (1 x 3)
+- [x] Save block size (1 x 2)
+- [ ] Save resize value (to implement because Tim knows which values should be resized after the analysis, theoretically col 2 of coefs)
+- [ ] Cut frames (before or after) works, but for plotting fascicle data purpose is then shifted...
+
+- There are many Image 3d matrixes containing the images but I am not sure all of them are really necessary. As they can be big variables, they influenced the memory used. 

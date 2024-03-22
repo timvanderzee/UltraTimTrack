@@ -21,6 +21,7 @@ classdef parfor_wait < handle
     %%Delete the obj after the loop.
     %WaitMessage.Destroy;
     %Copyright (c) 2019, Yun Pu
+    % 08/03/2024 - Edit by Paolo Tecchio
     properties (SetAccess = private)
         NumMessage; %Number of messages received from the workers.
         TotalMessage; %Number of total messages.
@@ -45,12 +46,15 @@ classdef parfor_wait < handle
            addParameter(InParser,'Waitbar',false,@islogical);
            addParameter(InParser,'FileName', 'screen', @ischar);
            addParameter(InParser,'ReportInterval', ceil(TotalMessage/100), @isnumeric);
+           addParameter(InParser,'Title',"",@(x) isempty(x) || isstring(x) || ischar(x)); %add by Paolo
            parse(InParser, varargin{:})
            Obj.Waitbar = InParser.Results.Waitbar;
            Obj.FileName = InParser.Results.FileName;
            Obj.ReportInterval = InParser.Results.ReportInterval;
+           wb_title = InParser.Results.Title;
+
            if Obj.Waitbar
-               Obj.WaitbarHandle = waitbar(0, [num2str(0), '%'], 'Resize', true);
+               Obj.WaitbarHandle = waitbar(0, [num2str(0), '%'], 'Resize', true,'Name',wb_title);
            end
            switch Obj.FileName
                case 'screen'
