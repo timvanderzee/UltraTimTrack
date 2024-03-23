@@ -2528,7 +2528,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         for f = frame_no+1:get(handles.frame_slider,'Max')
             % Get the current image
 
-%                             profile on
+                            profile on
             im2 = imcrop(handles.ImStack(:,:,handles.start_frame+f-1),handles.crop_rect);
             handles.NIm = im2;
 
@@ -2547,14 +2547,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 % state estimation
                 handles = ROI_state_estimator(handles,f,i,j);
 
-                % option 1: detect new points in each frame
-%                 points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-%                 points = double(points.Location);
-                
-                % option 2: use point from previous
-                points = pointsNew;
-                
-                % set the points
+                points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
+                points = double(points.Location);
                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
                 points = points(inPoints,:);
                 setPoints(pointTracker, points);
@@ -2570,12 +2564,12 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         
             end
 
-%             profile viewer
+            profile viewer
             frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
             waitbar(frac_progress,h, [num2str(round(frac_progress*100)), '%'])
         
         
-
+0
         end
 
 
@@ -2989,6 +2983,11 @@ for f = 1:get(handles.frame_slider,'Max')
     end
 end
 
+% check TimTrack
+for i = 1:handles.NumFrames
+    alpha_TT(i) = handles.geofeatures(i).alpha;
+end
+
 % forward state estimation
 for f = 1:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
@@ -3102,11 +3101,10 @@ handles.fcor(2) = str2double(get(hObject,'String'));
 % Update handles structure
 guidata(hObject, handles);
 
-% If we have estimates, run state estimation
-if length(handles.Region.Fascicle.fas_x) == handles.NumFrames 
-    do_state_estimation(hObject, eventdata, handles)
+% If we already processed, do state estimation
+if length(handles.Region.Fascicle.fas_x) == handles.NumFrames
+do_state_estimation(hObject, eventdata, handles)
 end
-
 
 % --- Executes during object creation, after setting all properties.
 function pos_gain_CreateFcn(hObject, eventdata, handles)
