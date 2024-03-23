@@ -2331,29 +2331,13 @@ ylabel(handles.mat_plot,'Pennation (deg)')
 %---------------------------------------------------------
 function handles = show_image(hObject, handles)
 
-% set(gcf,'DoubleBuffer','on');
-
 if isfield(handles,'ImStack')
-    % profile on
-    %     axes(handles.length_plot)
-    %     cla
-    %     hold on
     % find current frame number from slider
     frame_no = round(get(handles.frame_slider,'Value'));
-    % get the image depth
-    %     image_depth = handles.ID;
 
     % show the image
     if isfield(handles,'ImStack')
         Im = handles.ImStack(:,:,frame_no+handles.start_frame-1);
-        % make the image axes the current axes
-
-        %cla(handles.axes1)
-        % crop image with current cropping value
-        %         Im = imcrop(Im,handles.crop_rect);
-        %         hold off
-        % show the image
-        %         imshow(Im,'Border','loose')
 
         if ~isfield(handles, 'image') || ~isvalid(handles.image)
             axes(handles.axes1)
@@ -2363,54 +2347,39 @@ if isfield(handles,'ImStack')
             axis equal
 
         else
-            set(handles.image, 'CData',Im);
-            axes(handles.axes1)            
+            set(handles.image, 'CData',Im);         
         end
-
-
-
-        %         if isfield(handles,'Vidax_X')
-        %             set(handles.axes1,'XLimMode','manual','XLim',handles.Vidax_X,'YLim',handles.Vidax_Y');
-        %         else
-        %             set(handles.axes1,'XLimMode','manual','XLim',[0-(0.1*handles.crop_rect(3)) handles.crop_rect(3)+(0.1*handles.crop_rect(3))],'YLimMode','manual','YLim',[0 handles.vidHeight])
-        %         end
-
-        hold on
     end
 
     % Update Im and NIm
     handles.Im = Im;
     handles.NIm = handles.Im;
 
+    % Show the fascicle and ROI
     if isfield(handles,'Region')
         for i = 1:length(handles.Region)
             for j = 1:length(handles.Region(i).Fascicle)
 
                 if ~isfield(handles, 'fascicle') || ~isvalid(handles.fascicle)
-                    handles.fascicle = line('xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no}, ...
+                    handles.fascicle = line(handles.axes1,'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no}, ...
                         'color','Red', 'linewidth',2,'marker','o','markerfacecolor','Red');
                 else
                     set(handles.fascicle, 'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no})
                 end
 
                 if ~isfield(handles, 'ROI') || ~isvalid(handles.ROI)
-                    handles.ROI = line('xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no}, ...
+                    handles.ROI = line(handles.axes1,'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no}, ...
                         'linestyle',':','color','Red', 'linewidth',2);
                 else
                     set(handles.ROI, 'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no})
                 end
 
-                % plot the fascicle in the image
-                %                     hold on;
-                %                     plot(handles.axes1,handles.Region(i).Fascicle(j).fas_x{frame_no},handles.Region(i).Fascicle(j).fas_y{frame_no},'ro-','LineWidth',2)
-                %                     plot(handles.axes1,handles.Region(i).ROIx{frame_no},handles.Region(i).ROIy{frame_no},'r:','LineWidth',2)
-                %                     hold off;
-
             end
         end
     end
-
-    % vertical line in length plot
+    
+    
+    % remove previous vertical lines
     children = get(handles.length_plot, 'children');
     if length(children) > 1
         delete(children(1));
@@ -2421,33 +2390,21 @@ if isfield(handles,'ImStack')
         delete(children(1));
     end
 
-    xline(handles.length_plot, handles.Time(frame_no),'k');
-    xline(handles.mat_plot, handles.Time(frame_no),'k');
-
-    %         axes(handles.mat_plot)
-
-    % plot the data from the variable list of the accompanying dat file
-    %     if isfield(handles,'D')
-    %         plot_data(hObject,handles)
-    %         axes(handles.mat_plot)
-    %         y_range = get(handles.mat_plot,'YLim');
-    %         hold on
-    %         plot([handles.Time(frame_no+handles.start_frame-1) handles.Time(frame_no+handles.start_frame-1)],...
-    %             [y_range(1) y_range(2)],'k')
-    %
-    %         hold off
-    %     end
-    %     set(handles.mat_plot,'XLim',[0 handles.Time(end)]);
-    %
-    %     xlabel(handles.mat_plot,'Time')
-    %     ylabel(handles.mat_plot,'Data')
+    FL = handles.Region(1).fas_length;
+    PEN = handles.Region(1).fas_pen * 180/pi;
+    
+    % add new vertical lines
+    line(handles.length_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
+    line(handles.mat_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
+       
     handles.prev_frame_no = frame_no;
 
     % Update handles structure
     guidata(hObject, handles);
 
-
-    % profile viewer
+%     profile viewer
+    
+%     keyboard
 
 
 end
@@ -2479,7 +2436,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     frame_no = 1;
     
     im1 = imcrop(handles.ImStack(:,:,1),handles.crop_rect);
-    h = waitbar(0,'0%','Name','Running Opticflow...');
+    h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
 
     for i = 1:length(handles.Region)
             
@@ -2528,7 +2485,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         for f = frame_no+1:get(handles.frame_slider,'Max')
             % Get the current image
 
-%                             profile on
+%           profile on
             im2 = imcrop(handles.ImStack(:,:,handles.start_frame+f-1),handles.crop_rect);
             handles.NIm = im2;
 
@@ -2572,10 +2529,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
 %             profile viewer
             frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
-            waitbar(frac_progress,h, [num2str(round(frac_progress*100)), '%'])
+            waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
         
-        
-
         end
 
 
@@ -2631,7 +2586,7 @@ if isfield(handles,'ImStack')
         % TimTrack (parfor or for)
         if handles.do_parfor.Value
             % Then construct a ParforProgressbar object:
-            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...:)');
+            WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...');
             
             tstart = tic;
             parfor f = frames             
@@ -2645,7 +2600,7 @@ if isfield(handles,'ImStack')
         else
 
             tstart = tic;
-            hwb = waitbar(0,'','Name','Running TimTrack...:)');
+            hwb = waitbar(0,'','Name','Running TimTrack...');
             for f = frames
 
                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
