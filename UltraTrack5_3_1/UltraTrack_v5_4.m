@@ -582,7 +582,7 @@ frame_no = round(get(handles.frame_slider,'Value'));
 set(handles.frame_number,'String',num2str(frame_no));
 
 % update the image axes using show_image function (bottom)
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 % --- Executes during object creation, after setting all properties.
 function frame_slider_CreateFcn(hObject, eventdata, handles)
@@ -611,7 +611,7 @@ frame_no = str2num(get(handles.frame_number,'String'));
 set(handles.frame_slider,'Value',round(frame_no));
 
 % update the image axes using show_image function (bottom)
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 % --- Executes during object creation, after setting all properties.
 function frame_number_CreateFcn(hObject, eventdata, handles)
@@ -645,7 +645,7 @@ if get(handles.autorun_but,'BackgroundColor') == [0 1 0]
     end
 
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
 end
 
@@ -667,7 +667,7 @@ if isfield(handles,'ImStack')
         handles.Region(i).ROIy{frame_no}] = roipoly;
     handles.CIm = handles.Im;
 
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
 end
 
@@ -715,7 +715,7 @@ if isfield(handles,'ImStack')
         handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
     end
 
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
 end
 
@@ -775,7 +775,7 @@ if isfield(handles,'ImStack')
     set(handles.axes1)
     axis tight %first center the image
     axis auto 
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 end
 
 % --------------------------------------------------------------------
@@ -888,7 +888,7 @@ if isfield(handles,'ImStack')
     cla(handles.mat_plot)
     cla(handles.axes1) %clean image data    
 
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
     % Correct the drop down lists for regions and fascicles to match
     % imported data
@@ -932,7 +932,7 @@ handles.ImStackOr = handles.ImStack; %back up original
     % Clean axis from original image and tight axis on the cropped image
     cla
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
     axis tight
 
 %{ 
@@ -1007,7 +1007,7 @@ handles.vidWidth = handles.crop_rect(3);
 % Update handles structure
 guidata(hObject, handles);
 % update the image axes using show_image function (bottom)
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 % --------------------------------------------------------------------
 function menu_crop_image_Callback(hObject, eventdata, handles)
@@ -1041,7 +1041,7 @@ if isfield(handles,'ImStack')
     % Clean axis from original image and tight axis on the cropped image
     cla
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
     axis tight
 
 end
@@ -1058,7 +1058,7 @@ if isfield(handles,'ImStack')
     %handles.crop_rect = [1 1 handles.vidWidth handles.vidHeight];
     handles.ImStack = handles.ImStackOr; %restore original image
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
 end
 
@@ -1273,7 +1273,7 @@ if isfield(handles,'ImStack')
     end
 
 
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 
 end
 
@@ -1371,7 +1371,7 @@ if isfield(handles,'ImStack')
             set(handles.frame_slider,'Value',i);
             set(handles.frame_number,'String',num2str(i));
 
-            show_image(hObject,handles)
+            show_image(hObject,handles);
             img = handles.axes1;
             set(img,'color','w')
             F = getframe(img);
@@ -1391,7 +1391,7 @@ function variable_list_Callback(hObject, eventdata, handles)
 % Hints: contents = cellstr(get(hObject,'String')) returns variable_list contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from variable_list
 if isfield(handles,'D')
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -1414,7 +1414,7 @@ function legend_check_Callback(hObject, eventdata, handles)
 
 % Hint: get(hObject,'Value') returns toggle state of legend_check
 if isfield(handles,'D')
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 end
 
 
@@ -1869,7 +1869,7 @@ if strcmp(eventdata.Key,'rightarrow')
         % set the string in the frame_number box to the current frame value
         set(handles.frame_number,'String',num2str(frame_no));
 
-        show_image(hObject,handles)
+        show_image(hObject,handles);
     end
 end
 
@@ -1884,7 +1884,7 @@ if strcmp(eventdata.Key,'leftarrow')
         % set the string in the frame_number box to the current frame value
         set(handles.frame_number,'String',num2str(frame_no));
 
-        show_image(hObject,handles)
+        show_image(hObject,handles);
     end
 end
 
@@ -1928,7 +1928,7 @@ function PlayButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 set(hObject,'Interruptible','on');
-show_data(hObject, handles)
+show_data(hObject, handles);
 
 frame_no = round(get(handles.frame_slider,'Value'));
 end_frame= get(handles.frame_slider,'Max');
@@ -2033,7 +2033,7 @@ if isfield(handles.Region, 'fas_length_corr')
 end
 
 handles.KeyframeInd = logical(0.0);
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 
 
@@ -2364,14 +2364,14 @@ if isfield(handles,'ImStack')
                     handles.fascicle = line(handles.axes1,'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no}, ...
                         'color','Red', 'linewidth',2,'marker','o','markerfacecolor','Red');
                 else
-                    set(handles.fascicle, 'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no})
+                    set(handles.fascicle, 'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no});
                 end
 
                 if ~isfield(handles, 'ROI') || ~isvalid(handles.ROI)
                     handles.ROI = line(handles.axes1,'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no}, ...
                         'linestyle',':','color','Red', 'linewidth',2);
                 else
-                    set(handles.ROI, 'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no})
+                    set(handles.ROI, 'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no});
                 end
 
             end
@@ -2390,13 +2390,15 @@ if isfield(handles,'ImStack')
         delete(children(1));
     end
 
-    FL = handles.Region(1).fas_length;
-    PEN = handles.Region(1).fas_pen * 180/pi;
-    
-    % add new vertical lines
-    line(handles.length_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
-    line(handles.mat_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
-       
+    if isfield(handles,'Region')
+        FL = handles.Region(1).fas_length;
+        PEN = handles.Region(1).fas_pen * 180/pi;
+
+        % add new vertical lines
+        line(handles.length_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
+        line(handles.mat_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
+      
+    end
     handles.prev_frame_no = frame_no;
 
     % Update handles structure
@@ -2425,9 +2427,7 @@ handles = process_all_UltraTrack(hObject, eventdata, handles);
 guidata(hObject, handles);
 
 % update the image axes using show_image function (bottom)
-show_image(hObject,handles)
-
-show_data(hObject, handles)
+show_data(hObject, handles);
 
 function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
@@ -2879,7 +2879,7 @@ end
 % Update handles structure
 guidata(hObject, handles);
 
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 
 function gain_Callback(hObject, eventdata, handles)
@@ -2964,7 +2964,7 @@ for f = get(handles.frame_slider,'Max'):-1:1
     end
 end
 
-show_data(hObject, handles)
+show_data(hObject, handles);
 guidata(hObject, handles);
 
 % --- Executes on button press in flipimage.
@@ -3001,7 +3001,7 @@ end
 handles.ImStack = flip(handles.ImStack, 2);
 %end
 guidata(hObject, handles);
-show_image(hObject,handles)
+show_image(hObject,handles);
 
 
 
@@ -3022,7 +3022,10 @@ handles = process_all_UltraTrack(hObject, eventdata, handles);
 guidata(hObject, handles);
 
 % Show image
-show_image(hObject,handles)
+show_image(hObject,handles);
+
+% Show data
+show_data(hObject,handles);
 
 
 % --- Executes during object creation, after setting all properties.
