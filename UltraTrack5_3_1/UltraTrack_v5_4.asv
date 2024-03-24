@@ -2482,7 +2482,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         tstart = tic;
         %calculate block size according to ROI 
         width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.20);
-        height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.40); %thickness changes?
+        height      =     floor(max(abs(diff(handles.Region.ROIy{frame_no})) * 0.40); %thickness changes?
 
         handles.BlockSize = [width height]; %save as width and height for later comparison
 
