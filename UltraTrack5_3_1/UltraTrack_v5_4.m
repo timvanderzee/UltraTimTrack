@@ -1349,12 +1349,6 @@ function save_video_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% determine maximal horizontal range
-for i =  1:1:get(handles.frame_slider,'Max')
-    x(i,:) = handles.Region.Fascicle.fas_x{i};
-end
-
-xrange = [min(x(:)) max(x(:))];
 
 if isfield(handles,'ImStack')
     [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
@@ -1367,21 +1361,22 @@ if isfield(handles,'ImStack')
 
         %         waitbar(0, 'Saving video ...');
 
-        axes(handles.axes1)
+%         axes(handles.axes1)
 
+        h = waitbar(0,['Saving frame 1/', num2str(handles.NumFrames)],'Name','Saving to video file...');
+        
         for i = 1:1:get(handles.frame_slider,'Max')
 
-            set(handles.frame_slider,'Value',i);
-            set(handles.frame_number,'String',num2str(i));
-
-            show_image(hObject,handles);
-            img = handles.axes1;
-            set(img,'color','w')
-            F = getframe(img);
+            F = handles.ImTrack(:,:,:,i);
             writeVideo(vidObj,F)
+            
+            frac_progress = i/handles.NumFrames;
+            waitbar(frac_progress,h, ['Processing frame ', num2str(i), '/', num2str(get(handles.frame_slider,'Max'))])
+
         end
     end
     close(vidObj)
+    close(h)
 
 end
 
@@ -2369,30 +2364,6 @@ if isfield(handles,'ImStack')
     % Update Im and NIm
     handles.Im = Im;
     handles.NIm = handles.Im;
-
-    % Show the fascicle and ROI
-%     if isfield(handles,'Region')
-%         for i = 1:length(handles.Region)
-%             for j = 1:length(handles.Region(i).Fascicle)
-% 
-%                 if ~isfield(handles, 'fascicle') || ~isvalid(handles.fascicle)
-%                     handles.fascicle = line(handles.axes1,'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no}, ...
-%                         'color','Red', 'linewidth',2,'marker','o','markerfacecolor','Red');
-%                 else
-%                     set(handles.fascicle, 'xdata',handles.Region(i).Fascicle(j).fas_x{frame_no}, 'ydata', handles.Region(i).Fascicle(j).fas_y{frame_no});
-%                 end
-% 
-%                 if ~isfield(handles, 'ROI') || ~isvalid(handles.ROI)
-%                     handles.ROI = line(handles.axes1,'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no}, ...
-%                         'linestyle',':','color','Red', 'linewidth',2);
-%                 else
-%                     set(handles.ROI, 'xdata',handles.Region(i).ROIx{frame_no}, 'ydata', handles.Region(i).ROIy{frame_no});
-%                 end
-% 
-%             end
-%         end
-%     end
-    
     
     % remove previous vertical lines
     children = get(handles.length_plot, 'children');
@@ -2414,15 +2385,11 @@ if isfield(handles,'ImStack')
         line(handles.mat_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
       
     end
+
     handles.prev_frame_no = frame_no;
 
     % Update handles structure
     guidata(hObject, handles);
-
-%     profile viewer
-    
-%     keyboard
-
 
 end
 
@@ -2523,11 +2490,11 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 handles = ROI_state_estimator(handles,f,i,j);
 
                 % option 1: detect new points in each frame
-                points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-                points = double(points.Location);
+%                 points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
+%                 points = double(points.Location);
                 
                 % option 2: use point from previous
-%                 points = pointsNew;
+                points = pointsNew;
                 
                 % set the points
                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
@@ -3011,6 +2978,9 @@ for f = 1:get(handles.frame_slider,'Max')
             currentImage = insertShape(handles.ImTrack(:,:,:,f),'line',[handles.Region(i).Fascicle(j).fas_x{f}(1), handles.Region(i).Fascicle(j).fas_y{f}(1), ...
             handles.Region(i).Fascicle(j).fas_x{f}(2),handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
         
+            currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1), handles.Region(i).Fascicle(j).fas_y{f}(1);...
+                handles.Region(i).Fascicle(j).fas_x{f}(2), handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
+        
             % add ROI
             currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1), handles.Region(i).ROIy{f}(1), ...
             handles.Region(i).ROIx{f}(2), handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3), handles.Region(i).ROIy{f}(3),...
@@ -3056,7 +3026,15 @@ end
 % If statement not necessary, if tick flip else flip back, so everytime flipimage
 % changes which depends on the callback, flip the image
 %if handles.flipimage 
+
+if isfield(handles, 'ImStack')
 handles.ImStack = flip(handles.ImStack, 2);
+end
+
+if isfield(handles, 'ImTrack')
+handles.ImTrack = flip(handles.ImTrack, 2);
+end
+
 %end
 guidata(hObject, handles);
 show_image(hObject,handles);
@@ -3074,7 +3052,9 @@ function apo_gain_Callback(hObject, eventdata, handles)
 handles.fcor(1) = str2double(get(hObject,'String'));
 
 % Run optical flow
-handles = process_all_UltraTrack(hObject, eventdata, handles);
+if isfield(handles, 'geofeatures')
+    handles = process_all_UltraTrack(hObject, eventdata, handles);
+end
 
 % Update handles structure
 guidata(hObject, handles);
