@@ -2406,7 +2406,7 @@ handles = process_all_TimTrack(hObject, eventdata, handles);
 handles = process_all_UltraTrack(hObject, eventdata, handles);
    
 % State estimation
-do_state_estimation(hObject, eventdata, handles)
+handles = do_state_estimation(hObject, eventdata, handles);
 
 % Update handles structure
 guidata(hObject, handles);
@@ -2933,7 +2933,7 @@ function do_parfor_Callback(hObject, eventdata, handles)
 handles.do_parfor = get(hObject,'Value');
 
 
-function do_state_estimation(hObject, eventdata, handles)
+function[handles] = do_state_estimation(hObject, eventdata, handles)
 % hObject    handle to do_state_estimation (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -2992,6 +2992,7 @@ for f = 1:get(handles.frame_slider,'Max')
     end
 end
 
+show_image(hObject, handles);
 show_data(hObject, handles);
 guidata(hObject, handles);
 
@@ -3099,8 +3100,10 @@ handles.fcor(2) = str2double(get(hObject,'String'));
 guidata(hObject, handles);
 
 % If we have estimates, run state estimation
+if isfield(handles, 'Region')
 if length(handles.Region.Fascicle.fas_x) == handles.NumFrames 
     do_state_estimation(hObject, eventdata, handles)
+end
 end
 
 
