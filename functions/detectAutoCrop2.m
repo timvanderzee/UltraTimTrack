@@ -6,9 +6,6 @@ function boundToCrop = detectAutoCrop2(frames,FrameRate)
         % Initialize a binary matrix.
         binT = logical(zeros(vidHeight, vidWidth));
 
-        % Calculate the mean gray level for each frame.
-        meanGrayLevels = squeeze(mean(mean(frames, 1), 2));
-
         % Initialize the adaptive background.
         alpha = 0.5;
         Background = frames(:, :, 1);

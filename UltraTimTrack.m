@@ -1,34 +1,34 @@
-function varargout = UltraTrack_v5_4(varargin)
-% ULTRATRACK_V5_4 M-file for UltraTrack_v5_4.fig
-%      ULTRATRACK_V5_4, by itself, creates a new ULTRATRACK_V5_4 or raises the existing
+function varargout = UltraTimTrack(varargin)
+% ULTRATIMTRACK M-file for UltraTimTrack.fig
+%      ULTRATIMTRACK, by itself, creates a new ULTRATIMTRACK or raises the existing
 %      singleton*.
-%      H = ULTRATRACK_V5_4 returns the handle to a new ULTRATRACK_V5_4 or the handle to
+%      H = ULTRATIMTRACK returns the handle to a new ULTRATIMTRACK or the handle to
 %      the existing singleton*.
 %
-%      ULTRATRACK_V5_4('CALLBACK',hObject,eventData,handles,...) calls the local
-%      function named CALLBACK in ULTRATRACK_V5_4.M with the given input arguments.
+%      ULTRATIMTRACK('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in ULTRATIMTRACK.M with the given input arguments.
 %
-%      ULTRATRACK_V5_4('Property','Value',...) creates a new ULTRATRACK_V5_4 or raises the
+%      ULTRATIMTRACK('Property','Value',...) creates a new ULTRATIMTRACK or raises the
 %      existing singleton*.  Starting from the left, property value pairs are
-%      applied to the GUI before UltraTrack_v5_4_OpeningFcn gets called.  An
+%      applied to the GUI before UltraTimTrack_OpeningFcn gets called.  An
 %      unrecognized property name or invalid value makes property application
-%      stop.  All inputs are passed to UltraTrack_v5_4_OpeningFcn via varargin.
+%      stop.  All inputs are passed to UltraTimTrack_OpeningFcn via varargin.
 %
 %      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
 %      instance to run (singleton)".
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
-% Edit the above text to modify the response to help UltraTrack_v5_4
+% Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 25-Mar-2024 14:40:54
+% Last Modified by GUIDE v2.5 25-Mar-2024 21:43:46
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
     'gui_Singleton',  gui_Singleton, ...
-    'gui_OpeningFcn', @UltraTrack_v5_4_OpeningFcn, ...
-    'gui_OutputFcn',  @UltraTrack_v5_4_OutputFcn, ...
+    'gui_OpeningFcn', @UltraTimTrack_OpeningFcn, ...
+    'gui_OutputFcn',  @UltraTimTrack_OutputFcn, ...
     'gui_LayoutFcn',  [] , ...
     'gui_Callback',   []);
 
@@ -44,25 +44,24 @@ end
 
 % End initialization code - DO NOT EDIT
 
-% --- Executes just before UltraTrack_v5_4 is made visible.
-function UltraTrack_v5_4_OpeningFcn(hObject, eventdata, handles, varargin)
+% --- Executes just before UltraTimTrack is made visible.
+function UltraTimTrack_OpeningFcn(hObject, eventdata, handles, varargin)
 % This function has no output args, see OutputFcn.
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-% varargin   command line arguments to UltraTrack_v5_4 (see VARARGIN)
+% varargin   command line arguments to UltraTimTrack (see VARARGIN)
 
 % Check if Parallel Computing Toolbox is installed
 % chkParallelToolBox(); %if exists it runs infinitely till Ultratimtrack is closed
 
-% Choose default command line output for UltraTrack_v5_4
+% Choose default command line output for UltraTimTrack
 handles.output = hObject;
 
 %add automatically all files and subfolders dynamically
 filename = [mfilename,'.m'];
 fullpath = which(filename);
-foldername = erase(fullpath,filename);
-mainfoldername = erase(foldername,'UltraTrack5_3_1/'); % need to move one up to include the submodule in path
+mainfoldername = erase(fullpath,filename);
 addpath(genpath(mainfoldername));
 
 % check to make sure there is a settings mat-file present, if not then make
@@ -110,7 +109,7 @@ set(gcf,'DoubleBuffer','on','Position',Position);
 % Update handles structure
 guidata(hObject, handles);
 
-% UIWAIT makes UltraTrack_v5_4 wait for user response (see UIRESUME)
+% UIWAIT makes UltraTimTrack wait for user response (see UIRESUME)
 % uiwait(handles.figure1);
 
 function menu_load_file_Callback(hObject, eventdata, handles)
@@ -231,6 +230,7 @@ elseif strcmp(Ext,'.png')
     %handles.Time = [0 1];
 
 else
+
     switch reader
         case 'VideoReader'
             handles.movObj = VideoReader([handles.pname handles.fname]);
@@ -247,8 +247,16 @@ else
                     %handles.ImStack(:,:,i) = fliplr(readFrame(handles.movObj));
                     handles.ImStack(:,:,i) = readFrame(handles.movObj);
                 end
+                
+                handles.ImStackPad(:,:,i) = [200*ones(size(handles.ImStack(:,:,i),1), round(size(handles.ImStack,2)/2)) handles.ImStack(:,:,i) ...
+                      200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2))];
+                  
+               handles.ImTrackOr(:,:,:,i) = repmat(handles.ImStackPad(:,:,i), 1, 1, 3);
+                  
                 i=i+1;
             end
+            
+            handles.ImTrack = handles.ImTrackOr;
             handles.NumFrames = size(handles.ImStack,3);
             handles.FrameRate = handles.NumFrames/handles.movObj.Duration;
 
@@ -306,7 +314,6 @@ set(handles.frame_slider,'Max',handles.NumFrames);
 set(handles.frame_slider,'Value',1);
 set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
 
-
 % set the image croppable area to the maximum area
 if ~isfield(handles,'crop_rect')||isempty(handles.crop_rect)
 
@@ -359,162 +366,15 @@ cd(handles.pname)
 % update the image axes using show_image function (bottom)
 clear_fascicle_Callback(hObject, eventdata, handles);
 
-if isfield(handles, 'ImTrack')
-    handles = rmfield(handles, 'ImTrack');
-end
 handles.ImStackOr = handles.ImStack;
 
-show_image(hObject,handles)
+guidata(hObject, handles);
+show_image(hObject,handles);
 waitbar(1,mb)
 close(mb)
 
-
-% --------------------------------------------------------------------
-function Load_Data_Callback(hObject, eventdata, handles)
-% hObject    handle to Load_Data (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-[dfile,dpath] = uigetfile('*.*','Select Associated Data File');
-handles.dat_file = [dpath dfile];
-
-% determine the file prefix and filetype
-[~,handles.file,handles.ext] = fileparts(handles.dat_file);
-
-% open the file using relevant method depending on filetype
-switch handles.ext
-
-    case '.mat'
-        % if it is a matfile then load
-        data = load(handles.dat_file);
-
-        % find the variables in the matfile
-        s = whos('-file', handles.dat_file);
-
-        for i = 1:length(s)
-            if strcmp(s(i).class,'struct')
-
-                % if data is analog data then make time and value column
-                if isfield(data.(s(i).name),'values')
-                    D(i).type = 'Analog';
-                    D(i).name = data.(s(i).name).title;
-                    D(i).time = data.(s(i).name).start:data.(s(i).name).interval:data.(s(i).name).start+(data.(s(i).name).interval*(data.(s(i).name).length-1));
-                    D(i).value = data.(s(i).name).values;
-
-                    % if data is analog data then make time and value column
-                elseif isfield(data.(s(i).name),'times')
-                    D(i).type = 'Digital';
-                    D(i).name = data.(s(i).name).title;
-                    D(i).time =  [(data.(s(i).name).times)'; (data.(s(i).name).times)'];
-                    D(i).value =  [(zeros(size(data.(s(i).name).times)))';(ones(size(data.(s(i).name).times))*5)'];
-
-                else warning('The file contains structures which cannot be resolved');
-                    D(i).type = 'Unknown';
-                    D(i).name = 'Unknown';
-                    D(i).time = [];
-                    D(i).value = [];
-                end
-
-            end
-        end
-
-    case '.c3d'
-
-        % at this stage we will limit this data to marker, analog and
-        % forceplate (calibrated analog) data. We can also add angles etc.
-        D = [];
-        % if file is c3d then load using the BTK matlab wrapper
-        acq = btkReadAcquisition(handles.dat_file);
-
-        % get marker data
-        [markers, markersInfo] = btkGetMarkers(acq);
-        % find the names of the markers from the field names of the
-        % structure
-        marker_names = fieldnames(markers);
-        % if there are marker names then store to structure
-        if ~isempty(marker_names)
-            for i = 1:length(marker_names)
-                M(i).type = 'Marker';
-                M(i).name = ['Marker ' marker_names{i}];
-                M(i).time = 1/markersInfo.frequency:1/markersInfo.frequency:length(markers.(marker_names{i}))/markersInfo.frequency;
-                M(i).value = markers.(marker_names{i});
-            end
-            if isempty(D)
-                D = M;
-            else D(end+1:end+length(M)) = M;
-            end
-        end
-
-        % get analog data
-        [analogs, analogsInfo] = btkGetAnalogs(acq);
-        % find the names of the analog channels from the field names of the
-        % structure
-        analog_names = fieldnames(analogs);
-        % if there are analog channel names then store to structure
-        if ~isempty(analog_names)
-            for i = 1:length(analog_names)
-                A(i).type = 'Analog';
-                A(i).name = ['Analog ' analog_names{i}];
-                A(i).time = 1/analogsInfo.frequency:1/analogsInfo.frequency:length(analogs.(analog_names{i}))/analogsInfo.frequency;
-                A(i).value = analogs.(analog_names{i});
-            end
-            if isempty(D)
-                D = A;
-            else D(end+1:end+length(A)) = A;
-            end
-        end
-
-    case '.dat'
-        % load the biodex dat file
-        biodex = biodex_load_file(handles.dat_file);
-
-        timeDiff = biodex.data(end,1) - handles.TimeStamps(end)
-
-        for i = 2:size(biodex.data,2)
-            D(i-1).type = 'Biodex_Analog';
-            switch i
-                case 2
-                    D(i-1).name = 'Torque';
-                case 3
-                    D(i-1).name = 'Velocity';
-                case 4
-                    D(i-1).name = 'Position';
-                otherwise
-                    D(i-1).name = ['Channel_' num2str(i-1)];
-            end
-            D(i-1).time =  biodex.data(:,1)-biodex.data(1,1);
-            D(i-1).value =  biodex.data(:,i);
-        end
-
-    case '.txt'
-        % load an ascii file --> must ensure that the first column is a
-        % time column
-        [~, data] = hdrload(handles.dat_file);
-
-        for i = 2:size(data,2)
-            D(i-1).type = 'Ascii_Analog';
-            D(i-1).name = ['Channel_' num2str(i-1)];
-            D(i-1).time =  data(:,1);
-            D(i-1).value =  data(:,i);
-        end
-
-    otherwise
-        warndlg('Unrecognised file extension - cannot load')
-        return
-end
-% save name of variable to variable list
-handles.Avail_Variables = {D.name};
-
-% fill in the variable list for plotting
-set(handles.variable_list,'String',handles.Avail_Variables);
-
-handles.D = D;
-show_image(hObject,handles)
-% Update handles structure
-guidata(hObject, handles);
-
 % --- Outputs from this function are returned to the command line.
-function varargout = UltraTrack_v5_4_OutputFcn(~, eventdata, handles)
+function varargout = UltraTimTrack_OutputFcn(~, eventdata, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -547,7 +407,7 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
     set(handles.frame_number,'String',1);
 
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 end
 
 % --- Executes on button press in cut_frames_after.
@@ -569,7 +429,7 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
     set(handles.frame_number,'String',frame_no);
 
     % update the image axes using show_image function (bottom)
-    show_image(hObject,handles)
+    show_image(hObject,handles);
 end
 
 % --- Executes on slider movement.
@@ -612,7 +472,6 @@ function frame_number_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of frame_number as text
 %        str2double(get(hObject,'String')) returns contents of frame_number as a double
 
-
 frame_no = str2num(get(handles.frame_number,'String'));
 set(handles.frame_slider,'Value',round(frame_no));
 
@@ -630,7 +489,6 @@ function frame_number_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 % -----------------------------------------------
 % -----------------------------------------------
@@ -655,100 +513,6 @@ if get(handles.autorun_but,'BackgroundColor') == [0 1 0]
 
 end
 
-
-% --- Executes on button press in define_roi.
-function define_roi_Callback(hObject, eventdata, handles)
-% hObject    handle to define_roi (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-if isfield(handles,'ImStack')
-
-    axes(handles.axes1)
-
-    frame_no = round(get(handles.frame_slider,'Value'));
-
-    i = get(handles.no_tracked_regions,'Value');
-    [handles.Region(i).ROI{frame_no},handles.Region(i).ROIx{frame_no},...
-        handles.Region(i).ROIy{frame_no}] = roipoly;
-    handles.CIm = handles.Im;
-
-    show_image(hObject,handles);
-
-end
-
-% --- Executes on button press in define_fascicle.
-function define_fascicle_Callback(hObject, eventdata, handles)
-% hObject    handle to define_fascicle (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-if isfield(handles,'ImStack')
-
-    % find current frame number from slider
-    frame_no = round(get(handles.frame_slider,'Value'));
-
-    i = get(handles.no_tracked_regions,'Value');
-    j = get(handles.no_tracked_fascicles,'Value');
-
-
-    % select the two points that define the fascicle line of action
-    %set(handles.axes1,'XLimMode','auto')
-    [p1,p2]=rbline(handles.axes1);
-    handles.Region(i).Fascicle(j).fas_x{frame_no}(1) = p1(1);
-    handles.Region(i).Fascicle(j).fas_x{frame_no}(2) = p2(1);
-    handles.Region(i).Fascicle(j).fas_y{frame_no}(1) = p1(2);
-    handles.Region(i).Fascicle(j).fas_y{frame_no}(2) = p2(2);
-
-    % %%adjust this ???
-    if handles.Region(i).Fascicle(j).fas_y{frame_no}(1) < handles.Region(i).Fascicle(j).fas_y{frame_no}(2)
-        handles.Region(i).Fascicle(j).fas_y{frame_no} = fliplr(handles.Region(i).Fascicle(j).fas_y{frame_no});
-        handles.Region(i).Fascicle(j).fas_x{frame_no} = fliplr(handles.Region(i).Fascicle(j).fas_x{frame_no});
-    end
-
-    handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no};handles.Region(i).Fascicle(j).fas_y{frame_no}]';
-
-    % calculate the length and pennation for the current frame
-    handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
-    scalar = handles.ID;%/handles.vidHeight;
-    handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
-
-    handles.CIm = handles.Im;
-
-    if ~isfield(handles.Region(i).Fascicle(j),'analysed_frames')
-        handles.Region(i).Fascicle(j).analysed_frames = frame_no;
-    else 
-        handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
-    end
-
-    show_image(hObject,handles);
-
-end
-
-% --------------------------------------------------------------------
-function menu_define_fascicle_Callback(hObject, eventdata, handles)
-% hObject    handle to menu_define_fascicle (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-define_fascicle_Callback(hObject, eventdata, handles)
-
-% --------------------------------------------------------------------
-function menu_define_roi_Callback(hObject, eventdata, handles)
-% hObject    handle to menu_define_roi (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-define_roi_Callback(hObject, eventdata, handles)
-
-
-% --------------------------------------------------------------------
-function menu_edit_current_Callback(hObject, eventdata, handles)
-% hObject    handle to menu_process_all (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
 % --- Executes on button press in clear_fascicle.
 function clear_fascicle_Callback(hObject, eventdata, handles)
 % hObject    handle to clear_fascicle (see GCBO)
@@ -761,29 +525,18 @@ if isfield(handles,'ImStack')
     end
     
     % reset tracking
-    handles.ImTrack = repmat(reshape(handles.ImStack,size(handles.ImStack,1),size(handles.ImStack,2),1,size(handles.ImStack,3)),1,1,3,1);
-
-    %     if ~isempty(get(handles.keyframe_list,'String'))
-    %         set(handles.keyframe_list,'String',[])
-    %     end
-
-    set(handles.no_tracked_regions,'Value',1,'String','1')
-    set(handles.no_tracked_fascicles,'Value',1,'String','1')
-    %     set(handles.RegionsToCorrect,'String',{'all','1'},'Value',1);
-    %     set(handles.FasciclesToCorrect,'String',{'all','1'},'Value',1);
-
-
+    if isfield(handles, 'ImTrackOr')
+        handles.ImTrack = handles.ImTrackOr;
+    end
+    
     % set current frame to 1
     set(handles.frame_slider,'Value',1);
     set(handles.frame_number,'String',1);
 
-    cla(handles.length_plot) %clean fascicle length data
-    cla(handles.mat_plot)%clean fascicle angle data
-    
-    cla(handles.axes1) %clean image data    
-    set(handles.axes1)
-    axis tight %first center the image
-    axis auto 
+    cla(handles.length_plot); %clean fascicle length data
+    cla(handles.mat_plot);%clean fascicle angle data
+    cla(handles.axes1); %clean image data    
+
     show_image(hObject,handles);
 end
 
@@ -926,7 +679,7 @@ handles.vidHeight = size(Im,1);
 
 %corners = detectAutoCrop(handles.movObj);
 handles.crop_rect = detectAutoCrop2(handles.ImStack,handles.movObj.FrameRate/2);
-% handles.ImStackOr = handles.ImStack; %back up original
+
     %tmp = zeros(size(handles.ImStack));
 
     %Crop all images before updating
@@ -944,75 +697,7 @@ handles.crop_rect = detectAutoCrop2(handles.ImStack,handles.movObj.FrameRate/2);
     show_image(hObject,handles);
     axis tight
 
-%{ 
-added by Tim
-% gIm = imbinarize(imgradient(Im));
-gIm = imbinarize(mean(diff(handles.ImStack,3),3));
 
-% sum across depth
-P = nan(2,2);
-for j = 1
-
-    if j == 2
-        gIm = gIm(:,P(1,1):P(1,2));
-    end
-
-    sgIm = sum(gIm,j);
-
-    % scale between -1 and 1
-    y = 2*sgIm / max(sgIm) - 1;
-
-
-    %     y = sgIm - mean(sgIm);
-
-    % fit
-    x = 1:length(y);
-
-    if j == 1
-        costfun = @(p,x,y) -sum(((x(:) * -1) + 2 * (x(:) > p(1) & x(:) < p(2))) .* y(:));
-        P(j,:) = fminsearch(@(p) costfun(p, x(:), y(:)), [length(y)/2 length(y)/2]);
-    else
-        costfun = @(p,x,y) -sum(((x(:) * -1) + 2 * (x(:) > p(1))) .* y(:));
-        P(j,1) = fminsearch(@(p) costfun(p, x(:), y(:)), 50);
-    end
-
-end
-
-
-handles.crop_rect(1) = round(P(1,1)) + 2; % add two to be safe
-handles.crop_rect(3) = round(P(1,2)-P(1,1)) - 4; % add two to be safe
-
-if j == 1
-    handles.crop_rect(2) = 1;
-    handles.crop_rect(4) = handles.vidHeight;
-else
-
-    handles.crop_rect(2) = round(P(2,1)) + 2;
-    handles.crop_rect(4) = handles.vidHeight - handles.crop_rect(2);
-end
-
-handles.vidHeight = handles.crop_rect(4);
-handles.vidWidth = handles.crop_rect(3);
-
-%}
-
-%%
-
-% % work out how to trim the edges of the ultrasound (edges are intensity value of
-% % 56]
-% m = find(Im(:,1) == 56); % find where the image starts vertically - at top of image the gray changes from 66 to 56.
-% n = find(mean((Im(end-50:end,:) == 56))<0.4); % use the averaage value of the bottom 50 rows to determine whether this is a high value (i.e. gray) or low (i.e. real image)
-%
-% if isempty(m)
-%     return;
-% end
-% if isempty(n)
-%     return;
-% end
-%
-% handles.crop_rect = [n(find(diff(n)>1)+1) m(1) n(end)-n(find(diff(n)>1)+1) length(m)-1]; % define the new rectangle for autocroping
-% handles.vidHeight = handles.crop_rect(4);
-% handles.vidWidth = handles.crop_rect(3);
 % Update handles structure
 guidata(hObject, handles);
 % update the image axes using show_image function (bottom)
@@ -1101,16 +786,6 @@ if isfield(handles,'ImStack')
 
 end
 
-% --- Executes on button press in export_check.
-function export_check_Callback(hObject, eventdata, handles)
-% hObject    handle to export_check (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of export_check
-
-
-
 % --------------------------------------------------------------------
 function menu_save_tracking_Callback(hObject, eventdata, handles)
 % hObject    handle to menu_save_tracking (see GCBO)
@@ -1139,64 +814,10 @@ if isfield(handles,'Region')
             else R(i).FL = handles.Region(i).fas_length(nz,:)';
                 R(i).PEN = handles.Region(i).fas_pen(nz,:)';
             end
+            
+            Save_As_Txt_Callback(hObject,eventdata,handles);
 
-            [~,handles.file,handles.ext] = fileparts(handles.dat_file);
-
-            if strcmp(handles.ext,'.c3d')
-
-                % Create a data acquisition object from the c3d file and store
-                % a handle to it
-                if i==1
-                    c3d_handle = btkReadAcquisition(handles.dat_file);
-
-                    Fq = btkGetPointFrequency(c3d_handle);
-                    Fn = btkGetPointFrameNumber(c3d_handle);% Get the number of frames of point data
-                    T_c3d = 0:1/Fq:(Fn-1)*(1/Fq);% create a time array at the rate of point data
-
-                    % find the nearest times in the c3d file to the start and end
-                    % of digitising
-                    [~,SD] = min(abs(T_c3d-T(1)));
-                    [~,ED] = min(abs(T_c3d-T(end)));
-                end
-
-
-                for j = 1:size(R(i).FL,1)
-
-                    % create a vector which is the ultrasound fascicle length interpolated at
-                    % the same time points that the marker data is determined
-                    L_data = interp1(T,R(i).FL(j,:)',T_c3d(SD:ED)','linear','extrap');
-                    L_data(isnan(L_data)) = 0;
-                    P_data = interp1(T,R(i).PEN(j,:)',T_c3d(SD:ED)','linear','extrap');
-                    P_data(isnan(P_data)) = 0;
-
-                    FasDataOut = zeros(btkGetPointFrameNumber(c3d_handle),3);% create an appropriately sized array
-                    FasDataOut(SD:ED,1) = L_data; % Insert the fascicle length data
-                    PenDataOut = zeros(btkGetPointFrameNumber(c3d_handle),3);
-                    PenDataOut(SD:ED,1) = P_data;
-
-                    % Append the length data as point (type = scalar but, could be
-                    % changed)
-
-                    Points = btkGetPoints(c3d_handle);
-                    Fdata_label = ['R' num2str(i) '_F' num2str(j) '_FasLength'];
-                    Pdata_label = ['R' num2str(i) '_F' num2str(j) '_Pennation'];
-
-                    if isfield(Points,Fdata_label)
-                        btkSetPoint(c3d_handle,Fdata_label,FasDataOut);
-                        btkSetPoint(c3d_handle,Pdata_label,PenDataOut);
-                    else
-                        btkAppendPoint(c3d_handle,'scalar',Fdata_label,FasDataOut);
-                        btkAppendPoint(c3d_handle,'scalar',Pdata_label,PenDataOut);
-                    end
-
-                    clear L_data P_data FasDataOut PenDataOut Fdata_label Pdata_label
-                end
-
-            else
-
-                Save_As_Txt_Callback(hObject,eventdata,handles);
-
-            end
+            
 
         end
 
@@ -1373,10 +994,6 @@ if isfield(handles,'ImStack')
 
     if FI > 0
 
-        %         waitbar(0, 'Saving video ...');
-
-%         axes(handles.axes1)
-
         h = waitbar(0,['Saving frame 1/', num2str(handles.NumFrames)],'Name','Saving to video file...');
         
         for i = 1:1:get(handles.frame_slider,'Max')
@@ -1394,41 +1011,6 @@ if isfield(handles,'ImStack')
 
 end
 
-% --- Executes on selection change in variable_list.
-function variable_list_Callback(hObject, eventdata, handles)
-% hObject    handle to variable_list (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns variable_list contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from variable_list
-if isfield(handles,'D')
-    show_image(hObject,handles);
-end
-
-% --- Executes during object creation, after setting all properties.
-function variable_list_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to variable_list (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-% --- Executes on button press in legend_check.
-function legend_check_Callback(hObject, eventdata, handles)
-% hObject    handle to legend_check (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of legend_check
-if isfield(handles,'D')
-    show_image(hObject,handles);
-end
-
 
 % --------------------------------------------------------------------
 function menu_process_all_Callback(hObject, eventdata, handles)
@@ -1438,157 +1020,11 @@ function menu_process_all_Callback(hObject, eventdata, handles)
 
 process_all_Callback(hObject, eventdata, handles)
 
-
-% --- Executes on selection change in no_tracked_fascicles.
-function no_tracked_fascicles_Callback(hObject, eventdata, handles)
-% hObject    handle to no_tracked_fascicles (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns no_tracked_fascicles contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from no_tracked_fascicles
-
-
-% --- Executes during object creation, after setting all properties.
-function no_tracked_fascicles_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to no_tracked_fascicles (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on selection change in no_tracked_regions.
-function no_tracked_regions_Callback(hObject, eventdata, handles)
-% hObject    handle to no_tracked_regions (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns no_tracked_regions contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from no_tracked_regions
-
-
-% --- Executes during object creation, after setting all properties.
-function no_tracked_regions_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to no_tracked_regions (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in AddRegionButton.
-function AddRegionButton_Callback(hObject, eventdata, handles)
-% hObject    handle to AddRegionButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-Curr_ROI_list = get(handles.no_tracked_regions,'String');
-if length(Curr_ROI_list)==1
-    no_ROI = str2num(Curr_ROI_list);
-else
-    no_ROI = str2num(Curr_ROI_list{end});
-end
-
-add_ROI = [Curr_ROI_list; {num2str(no_ROI + 1)}];
-set(handles.no_tracked_regions,'String',add_ROI);
-
-Curr_ROIcorrect_list = get(handles.RegionsToCorrect,'String');
-add_ROIcorr = [Curr_ROIcorrect_list; {num2str(no_ROI + 1)}];
-set(handles.RegionsToCorrect,'String',add_ROIcorr)
-
-
-% --- Executes on button press in AddFasButton.
-function AddFasButton_Callback(hObject, eventdata, handles)
-% hObject    handle to AddFasButton (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-Curr_FAS_list = get(handles.no_tracked_fascicles,'String');
-if length(Curr_FAS_list) == 1
-    no_FAS = str2num(Curr_FAS_list);
-else
-    no_FAS = str2num(Curr_FAS_list{end});
-end
-add_FAS = [Curr_FAS_list; {num2str(no_FAS + 1)}];
-set(handles.no_tracked_fascicles,'String',add_FAS);
-
-Curr_FAScorrect_list = get(handles.FasciclesToCorrect,'String');
-add_FAScorr = [Curr_FAScorrect_list; {num2str(no_FAS + 1)}];
-set(handles.FasciclesToCorrect,'String',add_FAScorr)
-
-
-% --- Executes on selection change in RegionsToCorrect.
-function RegionsToCorrect_Callback(hObject, eventdata, handles)
-% hObject    handle to RegionsToCorrect (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns RegionsToCorrect contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from RegionsToCorrect
-
-
-% --- Executes during object creation, after setting all properties.
-function RegionsToCorrect_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to RegionsToCorrect (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on selection change in FasciclesToCorrect.
-function FasciclesToCorrect_Callback(hObject, eventdata, handles)
-% hObject    handle to FasciclesToCorrect (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns FasciclesToCorrect contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from FasciclesToCorrect
-
-
-% --- Executes during object creation, after setting all properties.
-function FasciclesToCorrect_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to FasciclesToCorrect (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
 % --------------------------------------------------------------------
 function Save_Tracking_As_Callback(hObject, eventdata, handles)
 % hObject    handle to Save_Tracking_As (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-
-% --------------------------------------------------------------------
-function Save_As_C3D_Callback(hObject, eventdata, handles)
-% hObject    handle to Save_As_C3D (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-if strcmp(handles.ext,'.c3d')
-    menu_save_tracking_Callback(hObject,eventdata,handles)
-else
-    warndlg('DATA NOT SAVED - Saving to C3D format requires the input data file to be a C3D file','WARNING!')
-end
 
 % --------------------------------------------------------------------
 function Save_As_Txt_Callback(hObject, eventdata, handles)
@@ -1655,46 +1091,6 @@ if isfield(handles,'Region')
         dout = [dout data_out{i}];
     end
 
-    if isfield(handles, 'D') && get(handles.export_check,'Value')
-        % determine the variables highlighted in list
-        cur_var = get(handles.variable_list,'Value');
-
-        D_col_head = [];
-        D_col_type = [];
-        D_data_out = [];
-
-        for i = 1:length(cur_var)
-
-            new_col_head = [];
-            new_col_type = [];
-
-
-            if strcmp(handles.D(cur_var(i)).type,'Digital')
-                new_col = zeros(size(T));
-                for j = 1:size(handles.D(cur_var(i)).time,2)
-                    new_col(find(abs(T-handles.D(cur_var(i)).time(1,j)) == ...
-                        min(abs(T-handles.D(cur_var(i)).time(1,j)))),1) = ...
-                        handles.D(cur_var(i)).value(2,j);
-                end
-
-                new_col_head = [new_col_head handles.D(cur_var(i)).name '\t'];
-                new_col_type = [new_col_type '%3.6f\t'];
-            else new_col = interp1(handles.D(cur_var(i)).time, ...
-                    handles.D(cur_var(i)).value, T, 'linear', 'extrap');
-                for j = 1:size(handles.D(cur_var(i)).value,2)
-                    new_col_head = [new_col_head handles.D(cur_var(i)).name '\t'];
-                    new_col_type = [new_col_type '%3.6f\t'];
-                end
-            end
-
-            D_col_head = [D_col_head new_col_head];
-            D_col_type = [D_col_type new_col_type];
-            D_data_out = [D_data_out new_col];
-        end
-        header = [header D_col_head];
-        type = [type D_col_type];
-        dout = [dout D_data_out];
-    end
 
     header = [header '\n'];
     %     type = [type '\n'];
@@ -1768,67 +1164,6 @@ if isfield(handles,'Region')
     end
 end
 
-if isfield(handles, 'D') && get(handles.export_check,'Value')
-
-    %ExpAtRate = inputdlg('Do you want to maintain the original data sampling rate? (y/n)');
-
-    ExpAtRate = 'y';
-    % determine the variables highlighted in list
-    %cur_var = get(handles.variable_list,'Value');
-    var_list = get(handles.variable_list,'String');
-
-    if ~iscell(var_list)
-        var_list = {var_list};
-    end
-
-    Data =[];
-    for i = 1:length(var_list)
-
-        if strcmp(ExpAtRate,'y')
-
-            varname{i} = handles.D(i).name;
-            Data.(regexprep(varname{i},' ','_')) = handles.D(i).value(:,:);
-            if strcmp(handles.D(i).type,'Digital') && ~exist('Tdigital','var')
-                Tdigital  = handles.D(cur_var(i)).time;
-            elseif strcmp(handles.D(i).type,'Analog') && ~exist('Tanalog','var')
-                Tanalog  = handles.D(i).time;
-            end
-            if strcmp(handles.D(i).type,'Biodex_Analog') && ~exist('Tanalog','var')
-                Tanalog  = handles.D(i).time;
-            end
-
-        else
-            if strcmp(handles.D(i).type,'Digital')
-                new_col = zeros(size(T));
-                for j = 1:size(handles.D(i).time,2)
-                    new_col(find(abs(T-handles.D(i).time(1,j)) == ...
-                        min(abs(T-handles.D(i).time(1,j)))),1) = ...
-                        handles.D(i).value(2,j);
-                end
-            else
-                new_col = interp1(handles.D(i).time, ...
-                    handles.D(i).value, T, 'linear', 'extrap');
-
-            end
-
-            varname{i} = handles.D(i).name;
-            Data.(regexprep(varname{i},' ','_')) = new_col;
-        end
-    end
-    if strcmp(ExpAtRate,'y')
-        if exist('Tanalog','var')
-            Data.AnalogTime = Tanalog;
-        end
-        if exist('Tdigital','var')
-            Data.DigitalTime = Tdigital;
-        end
-    else
-        Data.Time = T;
-    end
-
-end
-
-
 
 [~,handles.file,handles.ext] = fileparts(handles.fname);
 fileout_suggest = [handles.pname handles.file '.mat'];
@@ -1901,38 +1236,6 @@ if strcmp(eventdata.Key,'leftarrow')
 end
 
 
-% --- Executes on button press in data_informed_checkbox.
-function data_informed_checkbox_Callback(hObject, eventdata, handles)
-% hObject    handle to data_informed_checkbox (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of data_informed_checkbox
-
-
-
-function MinDiff_Callback(hObject, eventdata, handles)
-% hObject    handle to MinDiff (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of MinDiff as text
-%        str2double(get(hObject,'String')) returns contents of MinDiff as a double
-
-
-% --- Executes during object creation, after setting all properties.
-function MinDiff_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to MinDiff (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
 % --- Executes on button press in PlayButton.
 function PlayButton_Callback(hObject, eventdata, handles)
 % hObject    handle to PlayButton (see GCBO)
@@ -1943,44 +1246,11 @@ set(hObject,'Interruptible','on');
 show_data(hObject, handles);
 
 frame_no = round(get(handles.frame_slider,'Value'));
-end_frame= get(handles.frame_slider,'Max');
+end_frame = get(handles.frame_slider,'Max');
 handles.stop = 0;
 guidata(hObject,handles);
 
-%set(gcf,'DoubleBuffer','on')
-
-% cla(handles.axes1) 
-%not sure this is necessary, if the fascicle is smaller the image (i.e. no
-%extrapolation), it is not nice to see
-
-if isfield(handles, 'Region')
-for i = 1:end_frame
-    x(i,:) = handles.Region.Fascicle.fas_x{i};
-    y(i,:) = handles.Region.Fascicle.fas_y{i};
-end
-%initiliaze them
-lim_x = [0, handles.vidWidth];
-lim_y = [0, handles.vidHeight];
-%x axis adjustment
-if min(x(:)) < 0
-    lim_x(1) = min(x(:));
-end
-if max(x(:)) > handles.vidWidth
-    lim_x(2) = max(x(:));
-end
-%y axis adjustment
-if min(y(:)) < 0
-    lim_y(1) = min(y(:));
-end
-if max(y(:)) > handles.vidHeight
-    lim_y(2) = max(y(:));
-end
-%set(handles.axes1,'XLim', [0 -abs(min(x(:))) handles.vidWidth + max(x(:))],'YLim', [min(y(:)) max(y(:))])
-% set(handles.axes1,'XLim', lim_x,'YLim', lim_y);
-end
-
 for f = frame_no:end_frame
-%        profile on
     stop = get(handles.StopButton,'Value');
 
     if stop
@@ -1988,25 +1258,13 @@ for f = frame_no:end_frame
         return
     else
         set(handles.frame_slider,'Value',f);
-
-        %         tic
-        % set the string in the frame_number box to the current frame value
         set(handles.frame_number,'String',num2str(f));
-        %         toc
-
-%         profile on
+        
+        % update image
         handles = show_image(hObject,handles);
         drawnow
-        
-%         cframe = getframe(handles.axes1);
-%         handles.ImTrack(:,:,:,f) = cframe.cdata(1:size(handles.ImStack,1),1:size(handles.ImStack,2),:);
-%         profile viewer
     end
-%        profile viewer
-% keyboard
 end
-
-
 
 % --- Executes on button press in StopButton.
 function StopButton_Callback(hObject, eventdata, handles)
@@ -2015,44 +1273,6 @@ function StopButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 set(handles.StopButton,'Value',1.0)
-
-
-
-% --- Executes on button press in Undo_Correction.
-function Undo_Correction_Callback(hObject, eventdata, handles)
-% hObject    handle to Undo_Correction (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-for i = 1:length(handles.Region)
-
-    if isfield(handles.Region(i).Fascicle,'fas_x_corr')
-
-        handles.Region(i).Fascicle = rmfield(handles.Region(i).Fascicle,'fas_x_corr');
-        handles.Region(i).Fascicle = rmfield(handles.Region(i).Fascicle,'fas_y_corr');
-
-    end
-
-    if isfield(handles.Region(i).Fascicle,'fas_x_keyframe')
-        handles.Region(i).Fascicle = rmfield(handles.Region(i).Fascicle,'fas_x_keyframe');
-        handles.Region(i).Fascicle = rmfield(handles.Region(i).Fascicle,'fas_y_keyframe');
-        handles.Region(i).Fascicle = rmfield(handles.Region(i).Fascicle,'current_xy_keyframe');
-    end
-end
-
-if isfield(handles.Region, 'fas_length_corr')
-    handles.Region = rmfield(handles.Region,'fas_length_corr');
-    handles.Region = rmfield(handles.Region,'fas_pen_corr');
-    if isfield(handles.Region,'fas_pen_keyframe')
-        handles.Region = rmfield(handles.Region,'fas_pen_keyframe');
-        handles.Region = rmfield(handles.Region,'fas_length_keyframe');
-    end
-
-end
-
-handles.KeyframeInd = logical(0.0);
-show_image(hObject,handles);
-
 
 
 % --------------------------------------------------------------------
@@ -2066,44 +1286,9 @@ menu_clear_tracking_Callback(hObject, eventdata, handles)% clear any current tra
 
 %select file
 [fname, pname] = uigetfile('*.mat', 'Pick a .MAT file');
-
 load([pname fname],'TrackingData');
 
-for i = 1:length(TrackingData.Region)
-
-    % Recompute the ROI using roipoly and the vertices that were saved
-    sf = TrackingData.start_frame;% find the start frame and end frame of previous tracking
-    ef = (length(TrackingData.Region(i).ROIx)-1)+TrackingData.start_frame;
-    s = size(handles.ImStack(:,:,sf:ef));% reorganise the image stack into a temporary cell array
-    I = shiftdim(mat2cell(handles.ImStack(:,:,sf:ef),...
-        s(1),s(2),ones(1,s(3))),1);
-    x = TrackingData.Region(i).ROIx; % get the coordinates of the vertices
-    y = TrackingData.Region(i).ROIy;
-    TrackingData.Region(i).ROI = cellfun(@roipoly,I,x,y,'UniformOutput',false);%compute ROI
-
-    for j = 1:length(TrackingData.Region(i).Fascicle)
-
-        if isfield(TrackingData.Region(i).Fascicle(j),'fas_x_corr')
-
-            TrackingData.Region(i).Fascicle(j).fas_x = TrackingData.Region(i).Fascicle(j).fas_x_corr;
-            TrackingData.Region(i).Fascicle(j).fas_y = TrackingData.Region(i).Fascicle(j).fas_y_corr;
-            TrackingData.Region(i).fas_length =  TrackingData.Region(i).fas_length_corr;
-            TrackingData.Region(i).fas_pen =  TrackingData.Region(i).fas_pen_corr;
-
-        end
-
-    end
-    if isfield(TrackingData.Region(i).Fascicle(j),'fas_x_corr')
-        TrackingData.Region(i).Fascicle = rmfield(TrackingData.Region(i).Fascicle,{'fas_x_corr','fas_y_corr'});
-    end
-end
-
-if isfield(TrackingData.Region(i).Fascicle(j),'fas_length_corr')
-    TrackingData.Region = rmfield(TrackingData.Region,{'fas_length_corr','fas_pen_corr'});
-end
-
-handles.Region=TrackingData.Region;
-
+handles.Region = TrackingData.Region;
 handles.start_frame = TrackingData.start_frame;
 handles.NumFrames = TrackingData.NumFrames;
 set(handles.frame_slider,'Min',1);
@@ -2115,98 +1300,6 @@ set(handles.frame_number,'String',1);
 
 show_image(hObject,handles);
 
-
-
-% --- Executes on button press in FixedROI_on.
-function FixedROI_on_Callback(hObject, eventdata, handles)
-% hObject    handle to FixedROI_on (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of FixedROI_on
-
-
-% --- Executes on selection change in EventList.
-function EventList_Callback(hObject, eventdata, handles)
-% hObject    handle to EventList (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: contents = cellstr(get(hObject,'String')) returns EventList contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from EventList
-show_image(hObject,handles);
-
-% --- Executes during object creation, after setting all properties.
-function EventList_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to EventList (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: listbox controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-
-% --- Executes on button press in LoadEvents.
-function LoadEvents_Callback(hObject, eventdata, handles)
-% hObject    handle to LoadEvents (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-if strcmp(handles.ext,'.c3d')
-
-    acq = btkReadAcquisition(handles.dat_file);
-    events = btkGetEvents(acq);
-    eventnames = fieldnames(events);
-    set(handles.EventList,'String',eventnames)
-    handles.c3d_events = events;
-
-    show_image(hObject,handles);
-else
-
-    warndlg('Can only load events from c3d format');
-    return
-
-end
-
-% --- Executes on button press in DeleteEvent.
-function DeleteEvent_Callback(hObject, eventdata, handles)
-% hObject    handle to DeleteEvent (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-
-% --- Executes on button press in Event2keyframe.
-function Event2keyframe_Callback(hObject, eventdata, handles)
-% hObject    handle to Event2keyframe (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-elist = get(handles.EventList,'String');
-
-if isempty(elist)
-    warndlg('no events loaded')
-    return
-else
-    i = get(handles.EventList,'Value');
-    ename = elist{i};
-    acq = btkReadAcquisition(handles.dat_file);
-    events = btkGetEvents(acq);
-    eventT = events.(ename);
-    for k = 1:length(eventT)
-        [~,eventF(k)] = min(abs(handles.Time-eventT(k)));
-    end
-    eventF(eventF<handles.start_frame)=[];
-    eventF(eventF>(handles.start_frame+get(handles.frame_slider,'Max')))=[];
-    eventF=unique((eventF+1)-handles.start_frame);
-    for k = 1:length(eventF)
-        eventFc{k} = num2str(eventF(k));
-    end
-    set(handles.keyframe_list,'String',eventFc);
-    set(handles.keyframe_list,'Value',1);
-end
 
 
 % --- Executes on button press in zoominvideo.
@@ -2320,12 +1413,10 @@ for i = 1:length(handles.Region)
 
                 for j = 1:length(handles.Region(i).Fascicle)
 
-                    axes(handles.length_plot); hold off;
                     plot(handles.length_plot,time(nz),FL,'r','linewidth',2);
                     set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15]); %set axis 15% difference of min and and value,easier to read
                     box off;
 
-                    axes(handles.mat_plot); hold off;
                     plot(handles.mat_plot,time(nz),PEN,'r','linewidth',2);
                     set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15]); %set axis 15% difference of min and and value,easier to read
                     box off;
@@ -2335,8 +1426,8 @@ for i = 1:length(handles.Region)
     end
 end
 end
+
 set(handles.length_plot,'XLim',[0 handles.Time(end)]);
-%     L_range = get(handles.length_plot,'YLim');
 
 xlabel(handles.length_plot,'Time (s)')
 ylabel(handles.length_plot,'Fascicle Length (mm)')
@@ -2715,26 +1806,8 @@ y2_new = ypre(2) + dy2_cor;
 x1_new = x2_new - cosd(alpha_new) * L_new;
 y1_new = y2_new + sind(alpha_new) * L_new;
 
-% infer the correction
-% dx1_cor = x1_new - x(1);
-% dy1_cor = y1_new - y(1);
-
 handles.Region(i).Fascicle(j).fas_x{frame_no} = [x1_new x2_new];
 handles.Region(i).Fascicle(j).fas_y{frame_no} = [y1_new y2_new];
-% yprev = handles.Region(i).Fascicle(j).fas_y{frame_no-1};
-
-% if strcmp(direction,'forward') % apply to all frames in the future
-%     for k = frame_no:handles.NumFrames
-%         handles.Region(i).Fascicle(j).fas_x{k} = handles.Region(i).Fascicle(j).fas_x{k} + [dx1_cor dx2_cor];
-%         handles.Region(i).Fascicle(j).fas_y{k} = handles.Region(i).Fascicle(j).fas_y{k} + [dy1_cor dy2_cor];
-%     end
-%     
-% elseif strcmp(direction,'backward') % apply to all frames in the past
-%     for k = frame_no:-1:1
-%         handles.Region(i).Fascicle(j).fas_x{k} = handles.Region(i).Fascicle(j).fas_x{k} + [dx1_cor dx2_cor];
-%         handles.Region(i).Fascicle(j).fas_y{k} = handles.Region(i).Fascicle(j).fas_y{k} + [dy1_cor dy2_cor];
-%     end
-% end
 
 % calculate the length and pennation for the current frame
 handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
@@ -2905,10 +1978,6 @@ for i = 1:size(handles.Region,2)
 end
 
 % create analyzed frame
-handles.ImStackPad = [127*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2), size(handles.ImStack,3)) handles.ImStack ...
-                      127*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2), size(handles.ImStack,3))];
-     
-handles.ImTrack = repmat(reshape(handles.ImStackPad,size(handles.ImStackPad,1),size(handles.ImStackPad,2),1,size(handles.ImStackPad,3)),1,1,3,1);
 d = round(size(handles.ImStack,2)/2);
 
 f = frame_no;
@@ -3019,8 +2088,10 @@ end
 % end
 
 % create analyzed images
-handles.ImTrack = repmat(reshape(handles.ImStackPad,size(handles.ImStackPad,1),size(handles.ImStackPad,2),1,size(handles.ImStackPad,3)),1,1,3,1);
+handles.ImTrack = handles.ImTrackOr;
 d = round(size(handles.ImStack,2)/2);
+
+h = waitbar(0,['Estimating frame 1/', num2str(handles.NumFrames)],'Name','Performing state estimation...');
 
 for f = 1:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
@@ -3039,9 +2110,14 @@ for f = 1:get(handles.frame_slider,'Max')
         
             % save
             handles.ImTrack(:,:,:,f) = currentImage;
+            
+            frac_progress = f/handles.NumFrames;
+            waitbar(frac_progress,h, ['Estimating frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
         end
     end
 end
+
+close(h)
 
 show_image(hObject, handles);
 show_data(hObject, handles);
@@ -3304,3 +2380,4 @@ handles.fcor(4) = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
+
