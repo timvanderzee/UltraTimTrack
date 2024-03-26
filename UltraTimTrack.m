@@ -21,7 +21,7 @@ function varargout = UltraTimTrack(varargin)
 
 % Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 25-Mar-2024 21:43:46
+% Last Modified by GUIDE v2.5 26-Mar-2024 09:01:19
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -313,6 +313,9 @@ set(handles.frame_slider,'Min',1);
 set(handles.frame_slider,'Max',handles.NumFrames);
 set(handles.frame_slider,'Value',1);
 set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
+set(handles.frame_rate,'String',handles.FrameRate(1))
+set(handles.vid_width,'String',handles.vidWidth(1))
+set(handles.vid_height,'String',handles.vidHeight(1))
 
 % set the image croppable area to the maximum area
 if ~isfield(handles,'crop_rect')||isempty(handles.crop_rect)
@@ -863,7 +866,7 @@ if isfield(handles,'ImStack')
                 handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
 
                 handles.Region(i).fas_pen(frame_no,k) = atan2(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
-                scalar = handles.ID;%/handles.vidHeight;
+                scalar = handles.ID/handles.vidHeight;
                 handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
 
 
@@ -1409,32 +1412,25 @@ for i = 1:length(handles.Region)
                 FL = handles.Region(i).fas_length(nz,:);
                 PEN = handles.Region(i).fas_pen(nz,:) * 180/pi;
 
-                time = (dt:dt:length(handles.Region(i).fas_length(:,1))*dt)+((handles.start_frame-1)*dt);
+                time = 0:dt:((handles.NumFrames-1)*dt);
 
                 for j = 1:length(handles.Region(i).Fascicle)
 
                     plot(handles.length_plot,time(nz),FL,'r','linewidth',2);
-                    set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15]); %set axis 15% difference of min and and value,easier to read
-                    box off;
-
+                    set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
+                    xlabel('Time (s)'); ylabel('Fascicle Length (mm)');
+                    
                     plot(handles.mat_plot,time(nz),PEN,'r','linewidth',2);
-                    set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15]); %set axis 15% difference of min and and value,easier to read
-                    box off;
+                    set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
+                    handles.mat_plot.YLabel.String = 'Fascicle Angle (deg)';
+                    handles.mat_plot.XLabel.String = 'Time (s)';
+                    
                 end
             end
         end
     end
 end
 end
-
-set(handles.length_plot,'XLim',[0 handles.Time(end)]);
-
-xlabel(handles.length_plot,'Time (s)')
-ylabel(handles.length_plot,'Fascicle Length (mm)')
-
-set(handles.mat_plot,'XLim',[0 handles.Time(end)]);
-xlabel(handles.mat_plot,'Time (s)')
-ylabel(handles.mat_plot,'Pennation (deg)')
 
 %---------------------------------------------------------
 % Function to show image with appropriate image processing
@@ -1559,7 +1555,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
         handles.BlockSize = [width height]; %save as width and height for later comparison
 
-        % Ensure width and height are both odd numbers
+        % Ensure vidWidth and vidHeight are both odd numbers
         if mod(width, 2) == 0
             width = width + 1; % Increment by 1 to make it odd
         end
@@ -1612,7 +1608,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 handles.Region(i).fas_pen(f,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{f})),...
                 abs(diff(handles.Region(i).Fascicle(j).fas_x{f})));
 
-                scalar = handles.ID;%/handles.vidHeight;
+                scalar = handles.ID/handles.vidHeight;
 
                 handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
                 diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
@@ -1813,7 +1809,7 @@ handles.Region(i).Fascicle(j).fas_y{frame_no} = [y1_new y2_new];
 handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
     abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
-scalar = handles.ID;%/handles.vidHeight;
+scalar = handles.ID/handles.vidHeight;
 
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
@@ -1964,7 +1960,7 @@ for i = 1:size(handles.Region,2)
     handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
     if i == 1
-        scalar = handles.ID;
+        scalar = handles.ID/handles.vidHeight;
         handles.CIm = handles.Im;
     end
 
@@ -2001,7 +1997,7 @@ end
 guidata(hObject, handles);
 
 show_image(hObject,handles);
-
+show_data(hObject, handles)
 
 function gain_Callback(hObject, eventdata, handles)
 % hObject    handle to gain (see GCBO)
@@ -2156,11 +2152,15 @@ end
 %if handles.flipimage 
 
 if isfield(handles, 'ImStack')
-handles.ImStack = flip(handles.ImStack, 2);
+    handles.ImStack = flip(handles.ImStack, 2);
 end
 
 if isfield(handles, 'ImTrack')
-handles.ImTrack = flip(handles.ImTrack, 2);
+    handles.ImTrack = flip(handles.ImTrack, 2);
+end
+
+if isfield(handles, 'ImTrack')
+    handles.ImTrackOr = flip(handles.ImTrackOr, 2);
 end
 
 %end
@@ -2304,7 +2304,7 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 
 % Check if Parallel Computing Toolbox is running and shut it down
 delete(gcp('nocreate'));
-disp('Parallel pool shutted down!');
+% disp('Parallel pool shutted down!');
 % Hint: delete(hObject) closes the figure
 delete(hObject);
 
