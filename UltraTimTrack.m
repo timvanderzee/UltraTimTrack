@@ -232,33 +232,33 @@ elseif strcmp(Ext,'.png')
 else
 
     switch reader
+      
+        
         case 'VideoReader'
+
             handles.movObj = VideoReader([handles.pname handles.fname]);
 
+            % get info
             handles.vidHeight = handles.movObj.Height;
             handles.vidWidth = handles.movObj.Width;
+            handles.NumFrames = handles.movObj.NumFrames;
+            handles.FrameRate = handles.movObj.FrameRate;
+            
             i=1;
+            
+            % start clean
+            handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+            
             while hasFrame(handles.movObj)
                 waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
                 if regexp(handles.movObj.VideoFormat,'RGB')
-                    %handles.ImStack(:,:,i) = fliplr(im2gray(readFrame(handles.movObj)));
                     handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
                 else
-                    %handles.ImStack(:,:,i) = fliplr(readFrame(handles.movObj));
                     handles.ImStack(:,:,i) = readFrame(handles.movObj);
                 end
-                
-                handles.ImStackPad(:,:,i) = [200*ones(size(handles.ImStack(:,:,i),1), round(size(handles.ImStack,2)/2)) handles.ImStack(:,:,i) ...
-                      200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2))];
-                  
-               handles.ImTrackOr(:,:,:,i) = repmat(handles.ImStackPad(:,:,i), 1, 1, 3);
-                  
                 i=i+1;
             end
-            
-            handles.ImTrack = handles.ImTrackOr;
-            handles.NumFrames = size(handles.ImStack,3);
-            handles.FrameRate = handles.NumFrames/handles.movObj.Duration;
+
 
         case 'mmreader' % pre R2010b uses mmreader
             handles.movObj = eval([reader '([handles.pname handles.fname])']);
@@ -529,8 +529,13 @@ if isfield(handles,'ImStack')
     
     % reset tracking
     if isfield(handles, 'ImTrackOr')
-        handles.ImTrack = handles.ImTrackOr;
+        handles = rmfield(handles, 'ImTrackOr');
     end
+    
+    if isfield(handles, 'ImTrack')
+        handles = rmfield(handles, 'ImTrack');
+    end
+    
     
     % set current frame to 1
     set(handles.frame_slider,'Value',1);
@@ -723,22 +728,18 @@ if isfield(handles,'ImStack')
     [~,handles.crop_rect] = imcrop;
 
     handles.crop_rect = round(handles.crop_rect);
-    handles.vidHeight = handles.crop_rect(4);
-    handles.vidWidth = handles.crop_rect(3);
+    handles.vidHeight = handles.crop_rect(4)+1;
+    handles.vidWidth = handles.crop_rect(3)+1;
     
-%     handles.ImStackOr = handles.ImStack; %back up original
-    %tmp = zeros(size(handles.ImStack));
-
+    % save a copy and overwrite
+    ImStackOld = handles.ImStack;
+    handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+    
     %Crop all images before updating
     for ii = 1 : handles.NumFrames
-        tmp(:,:,ii) = imcrop(handles.ImStack(:,:,ii),handles.crop_rect);
+        handles.ImStack(:,:,ii) = imcrop(ImStackOld(:,:,ii),handles.crop_rect);
     end    
-   
-    handles.ImStack = tmp; %overwrite the one used thourghout the script
     
-    if isfield(handles,'ImTrack')
-        handles = rmfield(handles,'ImTrack');
-    end
     
     clearvars tmp
     % Clean axis from original image and tight axis on the cropped image
@@ -1521,7 +1522,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     % setup current and new image
     frame_no = 1;
     
-%     im1 = imcrop(handles.ImStack(:,:,1),handles.crop_rect);
     im1 = handles.ImStack(:,:,1);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
 
@@ -1573,7 +1573,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
             % Get the current image
 % tic
 %           profile on
-%             im2 = imcrop(handles.ImStack(:,:,handles.start_frame+f-1),handles.crop_rect);
             im2 = handles.ImStack(:,:,handles.start_frame+f-1);
             handles.NIm = im2;
 
@@ -1598,6 +1597,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 
                 % option 2: use point from previous
                 points = pointsNew;
+                
+%                 N(f) = length(points);
                 
                 % set the points
                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
@@ -1973,6 +1974,12 @@ for i = 1:size(handles.Region,2)
 
 end
 
+% Create padded image and ImTrack
+ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2), size(handles.ImStack,3),'uint8');
+ImStackPad = [ZeroPad,  handles.ImStack, ZeroPad];
+handles.ImTrackOr  = repmat(reshape(ImStackPad, size(ImStackPad,1),size(ImStackPad,2), 1, size(ImStackPad,3)), 1, 1, 3, 1);  
+handles.ImTrack = handles.ImTrackOr;
+
 % create analyzed frame
 d = round(size(handles.ImStack,2)/2);
 
@@ -2159,7 +2166,7 @@ if isfield(handles, 'ImTrack')
     handles.ImTrack = flip(handles.ImTrack, 2);
 end
 
-if isfield(handles, 'ImTrack')
+if isfield(handles, 'ImTrackOr')
     handles.ImTrackOr = flip(handles.ImTrackOr, 2);
 end
 
