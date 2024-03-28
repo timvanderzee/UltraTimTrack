@@ -538,9 +538,6 @@ if isfield(handles,'ImStack')
     end
     
     % reset tracking
-    if isfield(handles, 'ImTrackOr')
-        handles = rmfield(handles, 'ImTrackOr');
-    end
     
     if isfield(handles, 'ImTrack')
         handles = rmfield(handles, 'ImTrack');
@@ -749,7 +746,6 @@ if isfield(handles,'ImStack')
     for ii = 1 : handles.NumFrames
         handles.ImStack(:,:,ii) = imcrop(ImStackOld(:,:,ii),handles.crop_rect);
     end    
-    
     
     clearvars tmp
     % Clean axis from original image and tight axis on the cropped image
@@ -1984,20 +1980,30 @@ for i = 1:size(handles.Region,2)
 
 end
 
-% Create padded image and ImTrack
-ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2), size(handles.ImStack,3),'uint8');
-ImStackPad = [ZeroPad,  handles.ImStack, ZeroPad];
-handles.ImTrackOr  = repmat(reshape(ImStackPad, size(ImStackPad,1),size(ImStackPad,2), 1, size(ImStackPad,3)), 1, 1, 3, 1);  
-handles.ImTrack = handles.ImTrackOr;
+% Create ImTrack
+if isfield(handles, 'ImTrack')
+    handles = rmfield(handles, 'ImTrack');
+end
+
+% pre-allocate ImTrack
+if ~isfield(handles, 'ImTrack')
+    handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,2)*2, 3, size(handles.ImStack,3), 'uint8');
+end
 
 % create analyzed frame
 d = round(size(handles.ImStack,2)/2);
 
 f = frame_no;
+
+ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2),'uint8');
+
 for i = 1:length(handles.Region)
     for j = 1:length(handles.Region(i).Fascicle)
+        
+        currentImage = [ZeroPad, handles.ImStack(:,:,f), ZeroPad];
+       
         % add fascicle
-        currentImage = insertShape(handles.ImTrack(:,:,:,f),'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
+        currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
         handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
 
         % add ROI
@@ -2007,6 +2013,7 @@ for i = 1:length(handles.Region)
 
         % save
         handles.ImTrack(:,:,:,f) = currentImage;
+        
     end
 end
 
@@ -2101,16 +2108,27 @@ end
 % end
 
 % create analyzed images
-handles.ImTrack = handles.ImTrackOr;
+% pre-allocate ImTrack if it doesn't exist yet
+if ~isfield(handles, 'ImTrack')
+    handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,1)*2, 3, size(handles.ImStack,3), 'uint8');
+end
+
+% create analyzed frame
 d = round(size(handles.ImStack,2)/2);
 
+ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2),'uint8');
+      
 h = waitbar(0,['Estimating frame 1/', num2str(handles.NumFrames)],'Name','Performing state estimation...');
 
 for f = 1:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
         for j = 1:length(handles.Region(i).Fascicle)
+            
+            % add padding
+            currentImage = [ZeroPad, handles.ImStack(:,:,f), ZeroPad];
+                  
             % add fascicle
-            currentImage = insertShape(handles.ImTrack(:,:,:,f),'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
+            currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
             handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
         
             currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
@@ -2174,10 +2192,6 @@ end
 
 if isfield(handles, 'ImTrack')
     handles.ImTrack = flip(handles.ImTrack, 2);
-end
-
-if isfield(handles, 'ImTrackOr')
-    handles.ImTrackOr = flip(handles.ImTrackOr, 2);
 end
 
 %end
