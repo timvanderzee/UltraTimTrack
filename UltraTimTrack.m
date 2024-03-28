@@ -247,6 +247,16 @@ else
             i=1;
             
             % start clean
+            if isfield(handles,'ImTrack')
+                handles = rmfield(handles, 'ImTrack');
+            end
+            if isfield(handles,'ImStack')
+                handles = rmfield(handles, 'ImStack');
+            end
+            if isfield(handles,'ImStackOr')
+                handles = rmfield(handles, 'ImStackOr');
+            end
+            
             handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
             
             while hasFrame(handles.movObj)
