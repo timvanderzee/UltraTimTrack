@@ -21,7 +21,7 @@ function varargout = UltraTimTrack(varargin)
 
 % Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 26-Mar-2024 09:01:19
+% Last Modified by GUIDE v2.5 30-Mar-2024 09:11:49
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -693,9 +693,7 @@ Im = handles.ImStack(:,:,1);
 handles.vidHeight = size(Im,1);
 
 %corners = detectAutoCrop(handles.movObj);
-handles.crop_rect = detectAutoCrop2(handles.ImStack,handles.movObj.FrameRate/2);
-
-    %tmp = zeros(size(handles.ImStack));
+handles.crop_rect = autocrop(handles.ImStack,handles.movObj.FrameRate/2);
 
     %Crop all images before updating
     for ii = 1 : handles.NumFrames
@@ -873,7 +871,7 @@ if isfield(handles,'ImStack')
                 handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
 
                 handles.Region(i).fas_pen(frame_no,k) = atan2(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
-                scalar = handles.ID/handles.vidHeight;
+                scalar = handles.ID;%/handles.vidHeight;
                 handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
 
 
@@ -1615,7 +1613,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 handles.Region(i).fas_pen(f,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{f})),...
                 abs(diff(handles.Region(i).Fascicle(j).fas_x{f})));
 
-                scalar = handles.ID/handles.vidHeight;
+                scalar = handles.ID;%/handles.vidHeight;
 
                 handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
                 diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
@@ -1816,7 +1814,7 @@ handles.Region(i).Fascicle(j).fas_y{frame_no} = [y1_new y2_new];
 handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
     abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
-scalar = handles.ID/handles.vidHeight;
+scalar = handles.ID;%/handles.vidHeight;
 
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
@@ -1967,7 +1965,7 @@ for i = 1:size(handles.Region,2)
     handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
     if i == 1
-        scalar = handles.ID/handles.vidHeight;
+        scalar = handles.ID;%/handles.vidHeight;
         handles.CIm = handles.Im;
     end
 
@@ -2412,3 +2410,96 @@ handles.fcor(4) = str2double(get(hObject,'String'));
 % Update handles structure
 guidata(hObject, handles);
 
+
+% --- Function for detecting borders of the images and returning the rect matrix to crop.
+function boundToCrop = autocrop(frames,FrameRate)
+% hObject    handle to crop (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+try
+    % Determine the size of the frames matrix.
+    [vidHeight, vidWidth, numberOfFrames] = size(frames);
+
+    % Initialize a binary matrix.
+    binT = false(vidHeight, vidWidth);
+
+    % Initialize the adaptive background.
+    alpha = 0.5;
+    Background = frames(:, :, 1);
+    %go
+    for frame = 2 : round(FrameRate/4) :  numberOfFrames
+        % Change background slightly at each frame.
+        Background = (1 - alpha) * frames(:, :, frame) + alpha * Background;
+
+        % Calculate the difference between this frame and the background.
+        differenceImage = frames(:, :, frame) - uint8(Background);
+
+        % Threshold with Otsu method.
+        %grayImage = rgb2gray(differenceImage);
+        grayImage = (differenceImage);
+        thresholdLevel = graythresh(grayImage);
+        binaryImage = im2bw(grayImage, thresholdLevel);
+
+        % Add binary image to the sum.
+        binT = binT + binaryImage;
+    end
+
+catch ME
+    % Handle errors.
+    strErrorMessage = sprintf('Error!!!');
+    disp(strErrorMessage);
+    return;
+end
+
+% Apply a median filter, [10 10] neighbor pixels to the binary matrix.
+filteredMatrix = medfilt2(binT, [10, 10], 'zeros');
+%maybe check the filled area to be sure that  i don't small bastards
+%around
+
+% Find connected components in the filtered matrix.
+stats = regionprops(filteredMatrix, 'BoundingBox');
+
+% Extract the bounding box information.
+boundingBoxes = cat(1, stats.BoundingBox);
+
+% Calculate the overall bounding box that encompasses all smaller bounding boxes.
+boundToCrop = [min(boundingBoxes(:, 1)), min(boundingBoxes(:, 2)), ...
+    max(boundingBoxes(:, 1) + boundingBoxes(:, 3)) - min(boundingBoxes(:, 1)), ...
+    max(boundingBoxes(:, 2) + boundingBoxes(:, 4)) - min(boundingBoxes(:, 2))];
+
+
+
+% --------------------------------------------------------------------
+function spatial_cal_Callback(hObject, eventdata, handles)
+% hObject    handle to spatial_cal (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if isfield(handles,'ImStack')
+
+    % find current frame number from slider
+    frame_no = round(get(handles.frame_slider,'Value'));
+
+    % select two point for calculating the calibration mmperpx
+    set(handles.axes1);
+    [~,distanceInPixels]=ginputYellow(2);
+
+    %create a simple dlg to type the real value
+    %Ask the user for the real-world distance.
+    userPrompt = {'Enter real distance in mm'};
+    dialogTitle = 'Calibration';
+    def = {''};
+    answer = inputdlg(userPrompt, dialogTitle, 1, def);
+
+    while isnan(str2double(answer{1}))  %check if it's non numeric
+        answer = inputdlg(userPrompt, dialogTitle, 1, def);
+    end
+    %get the answer
+    dist_mm = str2double(answer{1});
+
+    %calculate mmperpx factor
+    calibration_value = dist_mm /  abs(round(diff(distanceInPixels)));
+    calibration_value = round(calibration_value,3); %round otherwise the conversion crash in the calculation (don't ask why)
+    %update handles and GUI
+    set(handles.ImDepthEdit,"String",string(calibration_value)); %this should automatically update the plots with Fascicle data
+    ImDepthEdit_Callback(handles.ImDepthEdit, [], handles); % Manually call the callback function because it doesn't do automatically
+end
