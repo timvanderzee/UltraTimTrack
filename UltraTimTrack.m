@@ -1310,8 +1310,6 @@ set(handles.frame_number,'String',1);
 
 show_image(hObject,handles);
 
-
-
 % --- Executes on button press in zoominvideo.
 function zoominvideo_Callback(hObject, eventdata, handles)
 % hObject    handle to zoominvideo (see GCBO)
@@ -1469,6 +1467,7 @@ if isfield(handles,'ImStack')
         end
     end
 
+    
     % Update Im and NIm
     handles.Im = Im;
     handles.NIm = handles.Im;
@@ -1530,6 +1529,9 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     
     im1 = handles.ImStack(:,:,1);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
+    
+    % define the initial variance
+    handles.Region(1).ROIp{1} = 10;
 
     for i = 1:length(handles.Region)
             
@@ -1650,12 +1652,12 @@ if isfield(handles,'ImStack')
     im2 = imresize(handles.ImStack, 1/handles.imresize_fac);
 
     % call once to get the correct fascicle region
-    [geofeatures, ~, parms] = auto_ultrasound(im2(:,:,1), parms);
+    auto_ultrasound(im2(:,:,1), parms);
     
     % call again a bunch of times to get estimate the total duration
     for i = 1:min([size(im2,3), 5])
         tstart = tic;
-        geofeatures = auto_ultrasound(im2(:,:,1), parms);
+        auto_ultrasound(im2(:,:,1), parms);
         dt = toc(tstart);
     end
     
@@ -1685,7 +1687,8 @@ if isfield(handles,'ImStack')
             
             tstart = tic;
             parfor f = frames             
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                 WaitMessage.Send; %update waitbar parfor
             end
             WaitMessage.Destroy(); %update waitbar parfor
@@ -1698,7 +1701,8 @@ if isfield(handles,'ImStack')
             hwb = waitbar(0,'','Name','Running TimTrack...');
             for f = frames
 
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
                 waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
 
             end
@@ -1710,7 +1714,6 @@ if isfield(handles,'ImStack')
         for kk = 1:length(geofeatures)
             geofeatures(kk).super_coef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
             geofeatures(kk).deep_coef(2) = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
-            geofeatures(kk).faslen = geofeatures(kk).faslen * handles.imresize_fac;
         end
 
         handles.geofeatures = geofeatures;
@@ -1722,108 +1725,152 @@ end
 function[handles] = ROI_state_estimator(handles,frame_no,i,j)
 
 geofeatures = handles.geofeatures;
-
 n = handles.vidWidth;
 
-% Gains
-g = handles.fcor / handles.FrameRate;
-g(g>1) = 1;
-g(g<0) = 0;
+% We already have the apriori estimate, because we transformed points
+% forward using the warp matrix
+k.x_minus = handles.Region(i).ROIy{frame_no};
 
 % Hough estimate of vertical aponeurosis position
-ROIy_est = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
+k.y = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
 
-% State estimation on ROI
-ROIy_cor = handles.Region(i).ROIy{frame_no} + g(1) * (ROIy_est - handles.Region(i).ROIy{frame_no});
-handles.Region(i).ROIy{frame_no} = ROIy_cor;
+% previous estimate covariance
+k.P_prev = handles.Region(i).ROIp{frame_no-1};
+
+% get the process noise and measurement noise covariance
+[k.R, k.Q] = get_RQ_aponeurosis(handles, frame_no, i, j);
+
+% run kalman filter
+K = run_kalman_filter(k);
+
+% update
+handles.Region(i).ROIy{frame_no} = K.x_plus;
+handles.Region(i).ROIp{frame_no} = K.P_plus;
+
+function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
+Q = 1;
+R = 10;
+
+function[R, Q] = get_RQ_fascicle(handles, frame_no, i, j)
+% Optical flow is more reliable at small angles, because optical flow is
+% mostly horizontal shear and (errors in) horizontal shear affect the
+% fascicle less if its oriented more horizontally
+Q = 0.01 * sind(handles.Region(i).Fascicle(j).alpha{frame_no-1});
+
+% TimTrack is more reliable if alpha estimates are similar
+R = handles.geofeatures(frame_no).alpha.sigma;
+
+function [K] = run_kalman_filter(k)
+% this assumes we already have the aposteriori state estimate (k.x_minus),
+% the measurement (k.y) and the process- and measurement noise covariances (k.R and k.Q)
+
+% a posteriori variance estimate
+K.P_minus = k.P_prev + k.Q;
+
+% kalman gain
+K.K = K.P_minus / (K.P_minus + k.R);
+
+% estimated state
+K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
+
+% estimated variance
+K.P_plus = (1-K.K) * K.P_minus;
+
 
 function[handles] = state_estimator(handles,frame_no,i,j, direction)
+% the state here is [1x2], consisting of:
+% 1. horizontal position superficial attachment point
+% 2. fascicle angle
 
-geofeatures = handles.geofeatures;
-
-% Gains
-g = handles.fcor / handles.FrameRate;
-g(g>1) = 1;
-g(g<0) = 0;
-
-
-%% Get the current fascicle
 % Fascicle - Aponeurosis intersection points from optical flow
-xprev = handles.Region(i).Fascicle(j).fas_x{frame_no-1};
-yprev = handles.Region(i).Fascicle(j).fas_y{frame_no-1};
+fas_prev = [handles.Region(i).Fascicle(j).fas_x{frame_no-1}' handles.Region(i).Fascicle(j).fas_y{frame_no-1}'];
+alpha_prev = handles.Region(i).Fascicle(j).alpha{frame_no-1};
 
 % Apply the warp
 w = handles.Region(i).warp(:,:,frame_no);
-FASpos = transformPointsForward(w, [xprev(:) yprev(:)]);
+fas_new = transformPointsForward(w, fas_prev);
 
-% Based on optical flow (before state estimation)
-xpre = FASpos(:,1);
-ypre = FASpos(:,2);
+% Estimate the change in fascicle angle from the change in points
+dalpha = abs(atan2d(diff(fas_new(:,2)), diff(fas_new(:,1)))) - abs(atan2d(diff(fas_prev(:,2)), diff(fas_prev(:,1))));
+alpha_new = alpha_prev + dalpha;
 
-% Length and angle from optical flow
-apre = abs(atan2d(diff(ypre), diff(xpre)));
-Lpre = sqrt(diff(xpre).^2 + diff(ypre).^2);
+% A priori state estimate
+x_minus = [fas_new(2,1) alpha_new];
 
-%% Superficial intersection drift estimate
-% With respect to the initial position
-x20 = handles.Region(i).Fascicle(j).fas_x_original{1}(2);
-dx2_drift = xpre(2) - x20;
-% dx2_drift = 0;
+% previous estimate covariance
+handles.Region(i).Fascicle(j).fas_p{1} = [10 5];
+P_prev = handles.Region(i).Fascicle(j).fas_p{frame_no-1};
 
-% For vertical position, assume Hough is correct
-y20 = polyval(geofeatures(frame_no).super_coef, xpre(2));
-dy2_drift = ypre(2) - y20;
+% current aponeurosis
+ROI = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+super_apo   = ROI([1,4],:);
+deep_apo    = ROI([2,3],:);
+super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
+deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
-%% Fascicle angle drift estimate
-dalpha_drift = apre - geofeatures(frame_no).alpha;
+%% State estimation superficial aponeurosis attachment
+% get the process noise and measurement noise covariance
+[s.R, s.Q] = get_RQ_aponeurosis(handles, frame_no, i, j);
 
-%% Deep intersection drift estimate
-% option 1: take length from TimTrack
-% L_TT = geofeatures(frame_no).faslen;
+% a priori estimate from optical flow
+s.x_minus = x_minus(1);
 
-% option 2: use the deep aponeurosis from TimTrack
-fas_coef(1) = -tand(apre);
-fas_coef(2) =  ypre(2) - fas_coef(1) * xpre(2);
-x1_TT = (fas_coef(2) - geofeatures(frame_no).deep_coef(2)) / (geofeatures(frame_no).deep_coef(1) - fas_coef(1));
-y1_TT = polyval(geofeatures(frame_no).deep_coef, x1_TT);
-L_TT = sqrt(diff([x1_TT xpre(2)]).^2 + diff([y1_TT ypre(2)]).^2); % length before Hough
+% 'measurement', here is the first value
+s.y = handles.Region(i).Fascicle(j).fas_x_original{1}(2);
 
-% correct
-dL_drift = Lpre - L_TT;
+% previous state covariance
+s.P_prev = P_prev(1);
 
-%% Correct the drift
-% correction opposing the drift
-dx2_cor = -g(4) * dx2_drift;
-dy2_cor = -g(2) * dy2_drift;
+% run kalman filter
+S = run_kalman_filter(s);
 
-% length and angle
-alpha_cor   = -g(3) * dalpha_drift;
-L_cor       = -g(2) * dL_drift;
+% get the vertical point from the estimated aponeurosis
+fasy2 = super_coef(2) + S.x_plus*super_coef(1);
 
-% determine new lengh and angle to calculate deep correction
-alpha_new = apre + alpha_cor; 
-L_new = Lpre + L_cor;
-x2_new = xpre(2) + dx2_cor;
-y2_new = ypre(2) + dy2_cor;
+%% Fascicle angle estimate
+% get the process noise and measurement noise covariance
+[f.R, f.Q] = get_RQ_fascicle(handles, frame_no, i, j);
 
-x1_new = x2_new - cosd(alpha_new) * L_new;
-y1_new = y2_new + sind(alpha_new) * L_new;
+% apriori estimate from optical flow
+f.x_minus = x_minus(2);
 
-handles.Region(i).Fascicle(j).fas_x{frame_no} = [x1_new x2_new];
-handles.Region(i).Fascicle(j).fas_y{frame_no} = [y1_new y2_new];
+% measurement from Hough transform
+f.y = handles.geofeatures(frame_no).alpha.mu;
+
+% previous state covariance
+f.P_prev = P_prev(2);
+
+% run kalman filter
+F = run_kalman_filter(f);
+
+% get the deep attachment point from the superficial point and the angle
+fas_coef(1) = -tand(F.x_plus);
+fas_coef(2) =  fasy2 - fas_coef(1) * S.x_plus;
+fasx1 = (fas_coef(2) - deep_coef(2)) / (deep_coef(1) - fas_coef(1));
+fasy1 = deep_coef(2) + fasx1*deep_coef(1);
+
+%% update
+% state and dependent variables
+handles.Region(i).Fascicle(j).alpha{frame_no}   = F.x_plus;
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 S.x_plus];
+handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
+
+% state covariance
+handles.Region(i).Fascicle(j).fas_p{frame_no} = [S.P_plus F.P_plus];
+
+% kalman gain for fascicle
+handles.Region(i).Fascicle(j).K(frame_no) = F.K;
 
 % calculate the length and pennation for the current frame
-handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
-    abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
-
 scalar = handles.ID/handles.vidHeight;
+
+handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no}/180*pi;
 
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
 
-
-% function to perform transformation (warp) of the points
 function handles = apply_transform(handles,frame_no,prev_frame_no,i,j)
+% function to perform transformation (warp) of the points
 
 % extract the warp matrix
 w = handles.Region(i).warp(:,:,frame_no);
@@ -1867,6 +1914,59 @@ handles.Region(i).Fascicle(j).fas_y{frame_no}(2) = handles.Region(i).Fascicle(j)
 handles.Region(i).Fascicle(j).fas_x_original{frame_no} = handles.Region(i).Fascicle(j).fas_x{frame_no};
 handles.Region(i).Fascicle(j).fas_y_original{frame_no} = handles.Region(i).Fascicle(j).fas_y{frame_no};
 
+function[geofeatures] = get_fascicle_angle(data, parms)
+
+% run TimTrack
+geofeatures = auto_ultrasound(data, parms);
+
+as = geofeatures.alphas;
+ws = geofeatures.ws;
+wsrel = ws - min(ws);
+
+a = 0:90;
+w = zeros(size(a));
+
+for i = 1:length(a)
+    w(i) = sum(wsrel(as == a(i)));
+end
+
+norm_fun = @(c, x) c(1)*exp(-(x-c(2)).^2/(2*c(3)^2));
+cost_fun = @(c, x, y) sum((y - norm_fun(c,x)).^2);
+
+C0 = [max(w) geofeatures.alpha std(geofeatures.alphas)];
+C = fminsearch(@(p) cost_fun(p, a, w), C0);
+
+% update estimate
+TimTrack.alpha.mu = C(2);
+TimTrack.alpha.sigma = abs(C(3));
+
+% figure(10)
+% bar(a, w)
+% 
+% hold on
+% % C = [150 30 10];
+% plot(a, norm_fun(C, a), 'b-', 'LineWidth', 2)
+
+%% recalc fas_coef
+m = size(data,2);
+    
+Mx = round(m/2);
+My = mean([polyval(geofeatures.deep_coef, Mx) polyval(geofeatures.super_coef, Mx)]);
+
+geofeatures.fas_coef(1) = -tand(TimTrack.alpha.mu);
+geofeatures.fas_coef(2) =  My - Mx * geofeatures.fas_coef(1);
+
+cost = @(x, super_coef, deep_coef, fas_coef, Mx) max([(Mx - (x-deep_coef(2)) / (deep_coef(1)-fas_coef(1))).^2  (Mx - (x-super_coef(2)) / (super_coef(1)-fas_coef(1))).^2]);
+
+geofeatures.fas_coef(2) = fminsearch(@(x) cost(x, geofeatures.super_coef, geofeatures.deep_coef, geofeatures.fas_coef, Mx), My - Mx * geofeatures.fas_coef(1));
+
+%% update
+% scale back
+TimTrack.super_coef = geofeatures.super_coef;
+TimTrack.deep_coef = geofeatures.deep_coef;
+TimTrack.fas_coef = geofeatures.fas_coef;
+
+geofeatures = TimTrack;
 
 % --- Executes on button press in Auto_Detect.
 function Auto_Detect_Callback(hObject, eventdata, handles)
@@ -1874,23 +1974,10 @@ function Auto_Detect_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% add 3 to path and load TimTrack parameters
-%     ccd = cd;
-%     cd(handles.TimTrackfolder.String)
-%     addpath(genpath(cd));
-%     cd('Parameters')
 load('parms.mat','parms')
-%     cd(ccd)
-
-
 
 % find current frame number from slider
 frame_no = round(get(handles.frame_slider,'Value'));
-
-
-data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
-
-
 
 %% Aponeurosis detection
 axes(handles.axes1); hold off
@@ -1901,7 +1988,6 @@ for jj = 1:2
     apCentre = round(apCentre/handles.vidHeight,2)*100;
     apRound(jj) = round(apCentre,-1);
 end
-
 
 % don't use TimTrack's figure display, because we already have this GUI
 parms.show = 0;
@@ -1921,7 +2007,8 @@ parms.apo.deep.cut = [apRound(2)-range, min(apRound(2)+range, 100)] / 100;
 % max range
 parms.fas.range = 90 - [-90 89];
 
-% run TimTrack
+% detect orientation
+data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 [geofeatures, ~, parms] = auto_ultrasound(data, parms);
 alphas = geofeatures.alphas;
 alphas(alphas==90 | alphas == 180) = [];
@@ -1932,18 +2019,15 @@ else
     parms.fas.range = [8 80] + 90;
 end
 
-% redo TimTrack
-[geofeatures, ~, parms] = auto_ultrasound(data, parms);
-
-% scale back
-geofeatures.super_coef(2) = geofeatures.super_coef(2) * handles.imresize_fac;
-geofeatures.deep_coef(2) = geofeatures.deep_coef(2) * handles.imresize_fac;
-geofeatures.fas_coef(2) = geofeatures.fas_coef(2) * handles.imresize_fac;
-geofeatures.faslen = geofeatures.faslen * handles.imresize_fac;
-
+% run TimTrack
+parms.fas.npeaks = 100;
+geofeatures = get_fascicle_angle(data, parms);
 handles.parms = parms;
 
-%frame_no = 1;
+% scale
+geofeatures.super_coef = geofeatures.super_coef     .* [1 handles.imresize_fac];
+geofeatures.deep_coef = geofeatures.deep_coef       .* [1 handles.imresize_fac];
+geofeatures.fas_coef = geofeatures.fas_coef         .* [1 handles.imresize_fac];
 
 n = handles.vidWidth;
 i = 1; j = 1;
@@ -1952,6 +2036,9 @@ Deep_intersect_x = round((geofeatures.deep_coef(2) - geofeatures.fas_coef(2))   
 Super_intersect_x = round((geofeatures.super_coef(2) - geofeatures.fas_coef(2)) ./ (geofeatures.fas_coef(1) - geofeatures.super_coef(1)));
 Super_intersect_y = polyval(geofeatures.super_coef, Super_intersect_x);
 Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
+
+% draw a fascicle
+% h = drawline('Position', [Deep_intersect_x Deep_intersect_y; Super_intersect_x Super_intersect_y], 'color', 'red', 'linewidth',2);
 
 handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
 handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
@@ -1978,6 +2065,7 @@ for i = 1:size(handles.Region,2)
     else handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
     end
 
+    handles.Region(i).Fascicle(j).alpha{frame_no} = handles.Region(i).fas_pen(frame_no,j) * 180/pi;
 end
 
 % Create ImTrack
@@ -1995,12 +2083,13 @@ d = round(size(handles.ImStack,2)/2);
 
 f = frame_no;
 
-ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2),'uint8');
+ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
+ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
 
 for i = 1:length(handles.Region)
     for j = 1:length(handles.Region(i).Fascicle)
         
-        currentImage = [ZeroPad, handles.ImStack(:,:,f), ZeroPad];
+        currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
        
         % add fascicle
         currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
@@ -2042,8 +2131,6 @@ if isfield(handles.Region,'Fascicle')
     do_state_estimation(hObject, eventdata, handles)
     end
 end
-
-
 
 % --- Executes during object creation, after setting all properties.
 function gain_CreateFcn(hObject, eventdata, handles)
@@ -2116,7 +2203,8 @@ end
 % create analyzed frame
 d = round(size(handles.ImStack,2)/2);
 
-ZeroPad = 200*ones(size(handles.ImStack,1), round(size(handles.ImStack,2)/2),'uint8');
+ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
+ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
       
 h = waitbar(0,['Estimating frame 1/', num2str(handles.NumFrames)],'Name','Performing state estimation...');
 
@@ -2125,8 +2213,9 @@ for f = 1:get(handles.frame_slider,'Max')
         for j = 1:length(handles.Region(i).Fascicle)
             
             % add padding
-            currentImage = [ZeroPad, handles.ImStack(:,:,f), ZeroPad];
+            currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
                   
+%             tic
             % add fascicle
             currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
             handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
@@ -2139,6 +2228,7 @@ for f = 1:get(handles.frame_slider,'Max')
             handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
             handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
         
+%         toc
             % save
             handles.ImTrack(:,:,:,f) = currentImage;
             
