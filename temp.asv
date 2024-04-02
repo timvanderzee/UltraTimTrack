@@ -5,7 +5,7 @@ figure(10)
 geofeatures = handles.geofeatures;
 norm_fun = @(c, x) c(1)*exp(-(x-c(2)).^2/(2*c(3)^2)) + c(4);
 
-for i = 1:handles.NumFrames
+for i = 87 %1:handles.NumFrames
    
     
 %     bar(geofeatures(i).alpha.x, geofeatures(i).alpha.y);
@@ -19,10 +19,9 @@ for i = 1:handles.NumFrames
 %     
 %     drawnow
 %     pause
-%     
+    
 %     
     mu(i) = geofeatures(i).alpha.mu;
-    mu2(i) = geofeatures(i).alpha.median;
     sigma(i) = geofeatures(i).alpha.sigma;
     
 %     sigma2(i) = std(geofeatures(i).alpha
@@ -31,8 +30,7 @@ end
 
 figure(11)
 subplot(121)
-plot(mu); hold on
-plot(mu2)
+plot(mu)
 
 subplot(122)
 plot(sigma)

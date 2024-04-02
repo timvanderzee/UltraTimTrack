@@ -21,7 +21,7 @@ function varargout = UltraTimTrack(varargin)
 
 % Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 26-Mar-2024 09:01:19
+% Last Modified by GUIDE v2.5 02-Apr-2024 14:48:51
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -1466,7 +1466,12 @@ if isfield(handles,'ImStack')
             set(handles.image, 'CData',Im);         
         end
     end
-
+    
+    % if we're showing original, show the aponeurosis regions
+    if ~isfield(handles,'ImTrack')
+        handles.S = images.roi.Rectangle(gca,'position', [1 1 handles.vidWidth .3*handles.vidHeight],'color','blue');
+        handles.D = images.roi.Rectangle(gca,'position', [1 .5*handles.vidHeight handles.vidWidth .4*handles.vidHeight],'color','green');
+    end
     
     % Update Im and NIm
     handles.Im = Im;
@@ -1576,11 +1581,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 %         pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',10,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
         initialize(pointTracker,points,im1);
 
-
         for f = frame_no+1:get(handles.frame_slider,'Max')
             % Get the current image
-% tic
-%           profile on
             im2 = handles.ImStack(:,:,handles.start_frame+f-1);
             handles.NIm = im2;
 
@@ -1589,49 +1591,25 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
             [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
             handles.Region(i).warp(:,:,f) = w;
 
-            handles.CIm = handles.NIm;
-
             for j = 1:length(handles.Region(i).Fascicle)
 
-                % optical flow
-                handles = apply_transform(handles,f,f-1,i,j);
-
-                % state estimation
-                handles = ROI_state_estimator(handles,f,i,j);
-
-                % option 1: detect new points in each frame
-%                 points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-%                 points = double(points.Location);
-                
-                % option 2: use point from previous
-                points = pointsNew;
-                
-%                 N(f) = length(points);
+                % calc ROI from TimTrack
+                n = handles.vidWidth;
+                handles.Region(i).ROIx{f} = [1 1 n n 1]';
+                handles.Region(i).ROIy{f} = round([polyval(handles.geofeatures(f).super_coef, 1) polyval(handles.geofeatures(f).deep_coef, [1 n]) polyval(handles.geofeatures(f).super_coef, [n 1])])';
                 
                 % set the points
-                inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f},handles.Region(i).ROIy{f});
+                inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
                 points = points(inPoints,:);
                 setPoints(pointTracker, points);
                 
-                % calculate the length and pennation for the current frame
-                handles.Region(i).fas_pen(f,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{f})),...
-                abs(diff(handles.Region(i).Fascicle(j).fas_x{f})));
-
-                scalar = handles.ID/handles.vidHeight;
-
-                handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
-                diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
-        
             end
-% toc
-%             profile viewer
+
             frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
             waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
         
         end
 
-        % save a copy
-        handles.Region(i).fas_penOr = handles.Region(i).fas_pen;
 
 
     end
@@ -1640,6 +1618,9 @@ handles.ProcessingTime(2) = toc(tstart);
 
 
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
+
+% detect first frame
+Auto_Detect_Callback(hObject, eventdata, handles)
 
 % run TimTrack on all frames
 frames = 1:handles.NumFrames;
@@ -1714,6 +1695,7 @@ if isfield(handles,'ImStack')
         for kk = 1:length(geofeatures)
             geofeatures(kk).super_coef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
             geofeatures(kk).deep_coef(2) = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
+            geofeatures(kk).thickness = geofeatures(kk).thickness * handles.imresize_fac;
         end
 
         handles.geofeatures = geofeatures;
@@ -1721,15 +1703,65 @@ if isfield(handles,'ImStack')
     end
 end
 
+function[R, Q] = get_RQ_super_apo_point(handles, frame_no, i, j)
+Q = handles.Q;
+R = handles.X;
 
-function[handles] = ROI_state_estimator(handles,frame_no,i,j)
+function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
+Q = handles.Q;
+R = handles.R;
 
+function[R, Q] = get_RQ_fascicle(handles, frame_no, i, j)
+% Optical flow is more reliable at small angles, because optical flow is
+% mostly horizontal shear and (errors in) horizontal shear affect the
+% fascicle less if its oriented more horizontally
+Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{frame_no-1});
+
+% TimTrack is more reliable if alpha estimates are similar
+R = handles.geofeatures(frame_no).alpha.sigma;
+
+function[handles] = get_Qmax(hObject, eventdata, handles)
+
+for i = 1:handles.NumFrames
+    t(i) = handles.geofeatures(i).thickness;
+end
+
+handles.Qmax = asind(handles.Q/mean(t));
+
+
+function [K] = run_kalman_filter(k)
+% this assumes we already have the aposteriori state estimate (k.x_minus),
+% the measurement (k.y) and the process- and measurement noise covariances (k.R and k.Qvalue)
+
+% a posteriori variance estimate
+K.P_minus = k.P_prev + k.Q;
+
+% kalman xshiftcor
+K.K = K.P_minus / (K.P_minus + k.R);
+
+% estimated state
+K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
+
+% estimated variance
+K.P_plus = (1-K.K) * K.P_minus;
+
+
+function[handles] = state_estimator(handles,frame_no,i,j, direction)
+% the state here is [1x2], consisting of:
+% 1. horizontal position superficial attachment point
+% 2. fascicle angle
+
+w = handles.Region(i).warp(:,:,frame_no);
 geofeatures = handles.geofeatures;
 n = handles.vidWidth;
 
+%% Aponeurosis
+APO_prev = [handles.Region(i).ROIx{frame_no-1} handles.Region(i).ROIy{frame_no-1}];
+APO_new = transformPointsForward(w, APO_prev);
+
 % We already have the apriori estimate, because we transformed points
 % forward using the warp matrix
-k.x_minus = handles.Region(i).ROIy{frame_no};
+k.x_minus = APO_new(:,2);
 
 % Hough estimate of vertical aponeurosis position
 k.y = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
@@ -1747,60 +1779,12 @@ K = run_kalman_filter(k);
 handles.Region(i).ROIy{frame_no} = K.x_plus;
 handles.Region(i).ROIp{frame_no} = K.P_plus;
 
-function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
-Q = 1;
-R = 10;
-
-function[R, Q] = get_RQ_fascicle(handles, frame_no, i, j)
-% Optical flow is more reliable at small angles, because optical flow is
-% mostly horizontal shear and (errors in) horizontal shear affect the
-% fascicle less if its oriented more horizontally
-Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{frame_no-1});
-
-% TimTrack is more reliable if alpha estimates are similar
-R = handles.geofeatures(frame_no).alpha.sigma;
-
-function[handles] = get_Qmax(hObject, eventdata, handles)
-
-for i = 1:handles.NumFrames
-    s(i) = handles.geofeatures(i).alpha.sigma; % from TimTrack
-    a(i,1) = handles.geofeatures(i).alpha.mu; % from TimTrack
-    a(i,2) = handles.Region.fas_penOr(i,1)*180/pi; % from UltraTrack
-end
-
-mada = mean(abs(diff(a)));
-
-handles.Qmax = asind(0.5/200);
-
-
-function [K] = run_kalman_filter(k)
-% this assumes we already have the aposteriori state estimate (k.x_minus),
-% the measurement (k.y) and the process- and measurement noise covariances (k.R and k.Q)
-
-% a posteriori variance estimate
-K.P_minus = k.P_prev + k.Q;
-
-% kalman gain
-K.K = K.P_minus / (K.P_minus + k.R);
-
-% estimated state
-K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
-
-% estimated variance
-K.P_plus = (1-K.K) * K.P_minus;
-
-
-function[handles] = state_estimator(handles,frame_no,i,j, direction)
-% the state here is [1x2], consisting of:
-% 1. horizontal position superficial attachment point
-% 2. fascicle angle
-
+%% Fascicle
 % Fascicle - Aponeurosis intersection points from optical flow
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{frame_no-1}' handles.Region(i).Fascicle(j).fas_y{frame_no-1}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{frame_no-1};
 
 % Apply the warp
-w = handles.Region(i).warp(:,:,frame_no);
 fas_new = transformPointsForward(w, fas_prev);
 
 % Estimate the change in fascicle angle from the change in points
@@ -1823,13 +1807,13 @@ deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
 %% State estimation superficial aponeurosis attachment
 % get the process noise and measurement noise covariance
-[s.R, s.Q] = get_RQ_aponeurosis(handles, frame_no, i, j);
+[s.R, s.Q] = get_RQ_super_apo_point(handles, frame_no, i, j);
 
 % a priori estimate from optical flow
 s.x_minus = x_minus(1);
 
 % 'measurement', here is the first value
-s.y = handles.Region(i).Fascicle(j).fas_x_original{1}(2);
+s.y = handles.Region(i).Fascicle(j).fas_x{1}(2);
 
 % previous state covariance
 s.P_prev = P_prev(1);
@@ -1871,7 +1855,7 @@ handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
 % state covariance
 handles.Region(i).Fascicle(j).fas_p{frame_no} = [S.P_plus F.P_plus];
 
-% kalman gain for fascicle
+% kalman xshiftcor for fascicle
 handles.Region(i).Fascicle(j).K(frame_no) = F.K;
 
 % calculate the length and pennation for the current frame
@@ -1932,37 +1916,59 @@ function[TimTrack] = get_fascicle_angle(data, parms)
 % run TimTrack
 geofeatures = auto_ultrasound(data, parms);
 
-as = geofeatures.alphas;
-ws = geofeatures.ws;
-wsrel = ws - min(ws);
-wsrel = ws;
+% TimTrack.alpha.mu = geofeatures.alpha;
+% TimTrack.alpha.sigma = std(geofeatures.alphas);
 
-a = 0:90;
-w = zeros(size(a));
+a = parms.fas.range(2):-parms.fas.thetares:parms.fas.range(1);
+w = geofeatures.hs;
 
-for i = 1:length(a)
-    w(i) = max([(wsrel(as == a(i))),0]);
-end
+% help the optimization by adding some values
+A = a;
+W = w;
 
-norm_fun = @(c, x) c(1)*exp(-(x-c(2)).^2/(2*c(3)^2));
-cost_fun = @(c, x, y) sum((y - norm_fun(c,x)).^2);
+sine_fun = @(c, k) -diff(k)/2 * cos(c) + mean(k);
+norm_fun = @(c, x, k) c(1)*exp(-(x-sine_fun(c(2), k)).^2/(2*c(3)^2)) + c(4);
+cost_fun = @(c, x, k, y) sum((y - norm_fun(c,x,k)).^2);
 
-C0 = [max(w) geofeatures.alpha std(geofeatures.alphas)];
-C = fminsearch(@(p) cost_fun(p, a, w), C0);
+% bound on fascicle angle
+k = [5 80];
+
+alpha0 = max(k(1), geofeatures.alpha);
+
+C0 = [max(w)-min(w) acos((alpha0-mean(k))/(-diff(k)/2)) std(geofeatures.alphas) min(w)];
+C = fminsearch(@(p) cost_fun(p, A, k, W), C0);
 
 % update estimate
 TimTrack.alpha.A = C(1);
-TimTrack.alpha.mu = C(2);
+TimTrack.alpha.mu = sine_fun(C(2),k);
 TimTrack.alpha.sigma = abs(C(3));
+TimTrack.alpha.b = C(4);
 TimTrack.alpha.y = w;
 TimTrack.alpha.x = a;
 
+% norm_fun = @(c, mu, x) c(1)*exp(-(x-mu).^2/(2*c(2)^2)) + c(3);
+% cost_fun = @(c, x, mu, y) sum((y - norm_fun(c,mu, x)).^2);
+% 
+% C0 = [max(w)-min(w) std(geofeatures.alphas) min(w)];
+% 
+% mu = geofeatures.alpha;
+% C = fminsearch(@(p) cost_fun(p, A, mu, W), C0);
+% 
+% % update estimate
+% TimTrack.alpha.A = C(1);
+% TimTrack.alpha.mu = geofeatures.alpha;
+% TimTrack.alpha.sigma = C(2);
+% TimTrack.alpha.b = C(3);
+% TimTrack.alpha.y = w;
+% TimTrack.alpha.x = a;
+
+%%
 % figure(10)
-% bar(a, w)
+% bar(A, W)
 % 
 % hold on
 % % C = [150 30 10];
-% plot(a, norm_fun(C, a), 'b-', 'LineWidth', 2)
+% plot(A, norm_fun(C, mu, A), 'b-', 'LineWidth', 2)
 
 %% recalc fas_coef
 m = size(data,2);
@@ -1982,6 +1988,8 @@ geofeatures.fas_coef(2) = fminsearch(@(x) cost(x, geofeatures.super_coef, geofea
 TimTrack.super_coef     = geofeatures.super_coef;
 TimTrack.deep_coef      = geofeatures.deep_coef;
 TimTrack.fas_coef       = geofeatures.fas_coef;
+TimTrack.thickness      = geofeatures.thickness;
+TimTrack.alpha.median    = geofeatures.alpha;
 
 % --- Executes on button press in Auto_Detect.
 function Auto_Detect_Callback(hObject, eventdata, handles)
@@ -1997,12 +2005,12 @@ frame_no = round(get(handles.frame_slider,'Value'));
 %% Aponeurosis detection
 axes(handles.axes1); hold off
 
-for jj = 1:2
-    [~,apCentre] = ginputYellow(1);
-
-    apCentre = round(apCentre/handles.vidHeight,2)*100;
-    apRound(jj) = round(apCentre,-1);
-end
+% for jj = 1:2
+%     [~,apCentre] = ginputYellow(1);
+% 
+%     apCentre = round(apCentre/handles.vidHeight,2)*100;
+%     apRound(jj) = round(apCentre,-1);
+% end
 
 % don't use TimTrack's figure display, because we already have this GUI
 parms.show = 0;
@@ -2013,11 +2021,17 @@ parms.apo.deep.maxangle = 10;
 parms.fas.thetares = 0.5;
 
 % some default parameters
-range = 15;
+% range = 15;
+% 
+% % make range dependent on user-picked locations
+% parms.apo.super.cut = [max(apRound(1)-range, 0), apRound(1)+range] / 100;
+% parms.apo.deep.cut = [apRound(2)-range, min(apRound(2)+range, 100)] / 100;
 
-% make range dependent on user-picked locations
-parms.apo.super.cut = [max(apRound(1)-range, 0), apRound(1)+range] / 100;
-parms.apo.deep.cut = [apRound(2)-range, min(apRound(2)+range, 100)] / 100;
+parms.apo.super.cut = [handles.S.Position(2) handles.S.Position(2)+handles.S.Position(4)] / handles.vidHeight;
+parms.apo.deep.cut = [handles.D.Position(2) handles.D.Position(2)+handles.D.Position(4)] / handles.vidHeight;
+
+set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 
 % max range
 parms.fas.range = 90 - [-90 89];
@@ -2027,19 +2041,19 @@ data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 [geofeatures, ~, parms] = auto_ultrasound(data, parms);
 alphas = geofeatures.alphas;
 alphas(alphas==90 | alphas == 180) = [];
-
+% 
 if median(alphas) < 90 || isempty(alphas)
-    parms.fas.range = [8 80];
+    parms.fas.range = [1 80];
 else
-    parms.fas.range = [8 80] + 90;
+    parms.fas.range = [1 80] + 90;
 end
 
 % run TimTrack
-parms.fas.npeaks = 100;
 geofeatures = get_fascicle_angle(data, parms);
 handles.parms = parms;
 
 % scale
+geofeatures.thickness = geofeatures.thickness * handles.imresize_fac;
 geofeatures.super_coef = geofeatures.super_coef     .* [1 handles.imresize_fac];
 geofeatures.deep_coef = geofeatures.deep_coef       .* [1 handles.imresize_fac];
 geofeatures.fas_coef = geofeatures.fas_coef         .* [1 handles.imresize_fac];
@@ -2121,19 +2135,22 @@ for i = 1:length(handles.Region)
     end
 end
 
+set(handles.D, 'Position', [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)])
+set(handles.S, 'Position', [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)])
+
 % Update handles structure
 guidata(hObject, handles);
 
 show_image(hObject,handles);
 show_data(hObject, handles)
 
-function gain_Callback(hObject, eventdata, handles)
-% hObject    handle to gain (see GCBO)
+function xshiftcor_Callback(hObject, eventdata, handles)
+% hObject    handle to xshiftcor (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of gain as text
-%        str2double(get(hObject,'String')) returns contents of gain as a double
+% Hints: get(hObject,'String') returns contents of xshiftcor as text
+%        str2double(get(hObject,'String')) returns contents of xshiftcor as a double
 
 handles.fcor(3) = str2double(get(hObject,'String')); % [Hz]
 
@@ -2148,8 +2165,8 @@ if isfield(handles.Region,'Fascicle')
 end
 
 % --- Executes during object creation, after setting all properties.
-function gain_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to gain (see GCBO)
+function xshiftcor_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to xshiftcor (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -2183,14 +2200,14 @@ function[handles] = do_state_estimation(hObject, eventdata, handles)
 handles = get_Qmax(hObject, eventdata, handles);
 
 % start with the original
-for f = 1:get(handles.frame_slider,'Max')
-    for i = 1:length(handles.Region)
-        for j = 1:length(handles.Region(i).Fascicle)
-            handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
-            handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
-        end
-    end
-end
+% for f = 1:get(handles.frame_slider,'Max')
+%     for i = 1:length(handles.Region)
+%         for j = 1:length(handles.Region(i).Fascicle)
+%             handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
+%             handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
+%         end
+%     end
+% end
 
 % forward state estimation
 for f = 2:get(handles.frame_slider,'Max')
@@ -2307,90 +2324,6 @@ guidata(hObject, handles);
 show_image(hObject,handles);
 
 
-
-function apo_gain_Callback(hObject, eventdata, handles)
-% hObject    handle to apo_gain (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of apo_gain as text
-%        str2double(get(hObject,'String')) returns contents of apo_gain as a double
-
-handles.fcor(1) = str2double(get(hObject,'String'));
-
-% Run optical flow
-if isfield(handles, 'geofeatures')
-    handles = process_all_UltraTrack(hObject, eventdata, handles);
-end
-
-% Update handles structure
-guidata(hObject, handles);
-
-% Show image
-show_image(hObject,handles);
-
-% Show data
-show_data(hObject,handles);
-
-
-% --- Executes during object creation, after setting all properties.
-function apo_gain_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to apo_gain (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-handles.fcor(1) = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-
-
-function pos_gain_Callback(hObject, eventdata, handles)
-% hObject    handle to pos_gain (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of pos_gain as text
-%        str2double(get(hObject,'String')) returns contents of pos_gain as a double
-
-handles.fcor(2) = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-% If we have estimates, run state estimation
-if isfield(handles, 'Region')
-if length(handles.Region.Fascicle.fas_x) == handles.NumFrames 
-    do_state_estimation(hObject, eventdata, handles)
-end
-end
-
-
-% --- Executes during object creation, after setting all properties.
-function pos_gain_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to pos_gain (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-handles.fcor(2) = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-
 % --- Function to calculate euclidean distance form the fascicle line and
 % the featuers points to keep around that fascicle (NOT USED NOW)
 function distances = pointToLineDistance(points, line)
@@ -2481,31 +2414,28 @@ handles.imresize_fac = str2double(get(hObject,'String'));
 guidata(hObject, handles);
 
 
-
-
-function xgain_Callback(hObject, eventdata, handles)
-% hObject    handle to xgain (see GCBO)
+function Qvalue_Callback(hObject, eventdata, handles)
+% hObject    handle to Qvalue (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of xgain as text
-%        str2double(get(hObject,'String')) returns contents of xgain as a double
+% Hints: get(hObject,'String') returns contents of Qvalue as text
+%        str2double(get(hObject,'String')) returns contents of Qvalue as a double
 
-handles.fcor(4) = str2double(get(hObject,'String')); % [Hz]
+handles.Q= str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
 
-% If we already processed, run state estimation
-if isfield(handles.Region,'Fascicle')
-    if length(handles.Region.Fascicle.fas_x) == handles.NumFrames
-        do_state_estimation(hObject, eventdata, handles)
-    end
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    do_state_estimation(hObject, eventdata, handles)
 end
 
+
 % --- Executes during object creation, after setting all properties.
-function xgain_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to xgain (see GCBO)
+function Qvalue_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Qvalue (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -2515,8 +2445,79 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-handles.fcor(4) = str2double(get(hObject,'String'));
+handles.Q = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
 
+
+function Xvalue_Callback(hObject, eventdata, handles)
+% hObject    handle to Xvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Xvalue as text
+%        str2double(get(hObject,'String')) returns contents of Xvalue as a double
+
+handles.X = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+% --- Executes during object creation, after setting all properties.
+function Xvalue_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Xvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.X = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+function Rvalue_Callback(hObject, eventdata, handles)
+% hObject    handle to Rvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Rvalue as text
+%        str2double(get(hObject,'String')) returns contents of Rvalue as a double
+handles.R = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+
+% --- Executes during object creation, after setting all properties.
+function Rvalue_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Rvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.R = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
