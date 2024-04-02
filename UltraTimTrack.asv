@@ -1765,12 +1765,12 @@ function[handles] = get_Qmax(hObject, eventdata, handles)
 for i = 1:handles.NumFrames
     s(i) = handles.geofeatures(i).alpha.sigma; % from TimTrack
     a(i,1) = handles.geofeatures(i).alpha.mu; % from TimTrack
-    a(i,2) = handles.Region.fas_penOr(i,1)*180/pi; % from UltraTrack
+    a(i,2) = handles.Region(i).fas_penOr(i,1)*180/pi; % from UltraTrack
 end
 
 mada = mean(abs(diff(a)));
 
-handles.Qmax = asind(0.5/200);
+handles.Qmax = mean(s) / sind(mean(a(:,1)));
 
 
 function [K] = run_kalman_filter(k)
@@ -1935,13 +1935,12 @@ geofeatures = auto_ultrasound(data, parms);
 as = geofeatures.alphas;
 ws = geofeatures.ws;
 wsrel = ws - min(ws);
-wsrel = ws;
 
 a = 0:90;
 w = zeros(size(a));
 
 for i = 1:length(a)
-    w(i) = max([(wsrel(as == a(i))),0]);
+    w(i) = sum(wsrel(as == a(i)));
 end
 
 norm_fun = @(c, x) c(1)*exp(-(x-c(2)).^2/(2*c(3)^2));
@@ -2178,9 +2177,6 @@ function[handles] = do_state_estimation(hObject, eventdata, handles)
 % hObject    handle to do_state_estimation (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-% get Qmax
-handles = get_Qmax(hObject, eventdata, handles);
 
 % start with the original
 for f = 1:get(handles.frame_slider,'Max')
