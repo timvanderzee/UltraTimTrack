@@ -21,7 +21,7 @@ function varargout = UltraTimTrack(varargin)
 
 % Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 30-Mar-2024 09:11:49
+% Last Modified by GUIDE v2.5 02-Apr-2024 18:06:02
 % Last Modified by GUIDE v2.5 02-Apr-2024 14:48:51
 % Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
@@ -267,6 +267,8 @@ else
                 else
                     handles.ImStack(:,:,i) = readFrame(handles.movObj);
                 end
+                
+                 handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
                 i=i+1;
             end
 
@@ -653,11 +655,6 @@ if isfield(handles,'ImStack')
         handles = rmfield(handles,'Region');
     end
 
-
-    if ~isempty(get(handles.keyframe_list,'String'))
-        set(handles.keyframe_list,'String',[])
-    end
-
     % set current frame to 1
     set(handles.frame_slider,'Value',1);
     set(handles.frame_number,'String',1);
@@ -668,18 +665,6 @@ if isfield(handles,'ImStack')
 
     show_image(hObject,handles);
 
-    % Correct the drop down lists for regions and fascicles to match
-    % imported data
-
-    ROIlistString = {'1'};
-    ROItoCorrString = {'all','1'};
-    set(handles.no_tracked_regions,'String',ROIlistString);
-    set(handles.RegionsToCorrect,'String',ROItoCorrString);
-
-    FASlistString = {'1'};
-    FAStoCorrString = {'all','1'};
-    set(handles.no_tracked_fascicles,'String',FASlistString);
-    set(handles.FasciclesToCorrect,'String',FAStoCorrString);
 end
 
 
@@ -689,28 +674,33 @@ function AutoCrop_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-Im = handles.ImStack(:,:,1);
+handles.ImStack = autocrop_Tim(handles.ImStack);
+handles.vidHeight = size(handles.ImStack,1);
+handles.vidWidth = size(handles.ImStack,2);
 
-handles.vidHeight = size(Im,1);
+% Im = handles.ImStack(:,:,1);
+% 
+% handles.vidHeight = size(Im,1);
+% 
+% %corners = detectAutoCrop(handles.movObj);
+% handles.crop_rect = autocrop(handles.ImStack,handles.movObj.FrameRate/2);
+% 
+%     %Crop all images before updating
+%     for ii = 1 : handles.NumFrames
+%         tmp(:,:,ii) = imcrop(handles.ImStack(:,:,ii),handles.crop_rect);
+%     end
+% 
+%     handles.ImStack = tmp; %overwrite the one used thourghout the script
+%     handles.vidHeight = handles.crop_rect(4);
+%     handles.vidWidth = handles.crop_rect(3);
+%     clearvars tmp
+%     % Clean axis from original image and tight axis on the cropped image
+%     cla
+%     % update the image axes using show_image function (bottom)
+%     show_image(hObject,handles);
+%     axis tight
 
-%corners = detectAutoCrop(handles.movObj);
-handles.crop_rect = autocrop(handles.ImStack,handles.movObj.FrameRate/2);
-
-    %Crop all images before updating
-    for ii = 1 : handles.NumFrames
-        tmp(:,:,ii) = imcrop(handles.ImStack(:,:,ii),handles.crop_rect);
-    end
-
-    handles.ImStack = tmp; %overwrite the one used thourghout the script
-    handles.vidHeight = handles.crop_rect(4);
-    handles.vidWidth = handles.crop_rect(3);
-    clearvars tmp
-    % Clean axis from original image and tight axis on the cropped image
-    cla
-    % update the image axes using show_image function (bottom)
-    show_image(hObject,handles);
-    axis tight
-
+menu_clear_tracking_Callback(hObject, eventdata, handles)
 
 % Update handles structure
 guidata(hObject, handles);
@@ -995,13 +985,14 @@ function save_video_Callback(hObject, eventdata, handles)
 
 
 if isfield(handles,'ImStack')
-    [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
-
-    vidObj = VideoWriter([pathout fileout],'MPEG-4');
+%     [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
+%     
+    filename = [handles.pname, handles.fname(1:end-4), '_analyzed'];
+    vidObj = VideoWriter(filename,'MPEG-4');
     vidObj.FrameRate = handles.FrameRate;
     open(vidObj);
 
-    if FI > 0
+%     if FI > 0
 
         h = waitbar(0,['Saving frame 1/', num2str(handles.NumFrames)],'Name','Saving to video file...');
         
@@ -1014,7 +1005,7 @@ if isfield(handles,'ImStack')
             waitbar(frac_progress,h, ['Processing frame ', num2str(i), '/', num2str(get(handles.frame_slider,'Max'))])
 
         end
-    end
+%     end
     close(vidObj)
     close(h)
 
@@ -1449,9 +1440,9 @@ if isfield(handles,'ImStack')
     if isfield(handles,'ImStack')
         
         if isfield(handles,'ImTrack')
-            Im = handles.ImTrack(:,:,:,frame_no+handles.start_frame-1);
+            Im = handles.ImTrack(:,:,:,frame_no);
         else
-            Im = handles.ImStack(:,:,frame_no+handles.start_frame-1);
+            Im = handles.ImStack(:,:,frame_no);
         end
 
         if ~isfield(handles, 'image') || ~isvalid(handles.image)
@@ -1467,7 +1458,7 @@ if isfield(handles,'ImStack')
     end
     
     % if we're showing original, show the aponeurosis regions
-    if ~isfield(handles,'ImTrack')
+    if ~isfield(handles,'ImTrack') && (~isfield(handles, 'S') || ~isvalid(handles.S))
         handles.S = images.roi.Rectangle(gca,'position', [1 1 handles.vidWidth .3*handles.vidHeight],'color','blue');
         handles.D = images.roi.Rectangle(gca,'position', [1 .5*handles.vidHeight handles.vidWidth .4*handles.vidHeight],'color','green');
     end
@@ -1604,22 +1595,20 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 
             end
 
-                scalar = handles.ID;%/handles.vidHeight;
-
-                handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
-                diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
+%                 scalar = handles.ID;%/handles.vidHeight;
+% 
+%                 handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
+%                 diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
         
-            end
+         
 % toc
 %             profile viewer
             frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
             waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
-        
         end
-
-
-
+        
     end
+    
 close(h)
 handles.ProcessingTime(2) = toc(tstart);
 
@@ -1627,7 +1616,7 @@ handles.ProcessingTime(2) = toc(tstart);
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
 % detect first frame
-Auto_Detect_Callback(hObject, eventdata, handles)
+handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % run TimTrack on all frames
 frames = 1:handles.NumFrames;
@@ -1653,9 +1642,7 @@ if isfield(handles,'ImStack')
     
 	% prompt to optionally change processing based on computational time
     answer = 'Undefined';
-    if (est_duration < 60) && handles.do_parfor.Value == 1
-        answer = questdlg(['Estimated TimTrack duration: ', num2str(est_duration), ' s, would you like to use parallel pool?'], 'Type of computation', 'Yes','No','Cancel','No');
-    elseif (est_duration > 60) && handles.do_parfor.Value == 0
+    if (est_duration > 60) && handles.do_parfor.Value == 0
         answer = questdlg(['Estimated TimTrack duration: ', num2str(est_duration), ' s, would you like to use parallel pool?'], 'Type of computation', 'Yes','No','Cancel','Yes');
     end
     
@@ -1718,11 +1705,12 @@ function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
 Q = handles.Q;
 R = handles.R;
 
-function[R, Q] = get_RQ_fascicle(handles, frame_no, i, j)
+function[R, Q] = get_RQ_fascicle(handles, frame_no,prev_frame_no)
+i= 1; j= 1;
 % Optical flow is more reliable at small angles, because optical flow is
 % mostly horizontal shear and (errors in) horizontal shear affect the
 % fascicle less if its oriented more horizontally
-Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{frame_no-1});
+Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{prev_frame_no});
 
 % TimTrack is more reliable if alpha estimates are similar
 R = handles.geofeatures(frame_no).alpha.sigma;
@@ -1753,7 +1741,9 @@ K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
 K.P_plus = (1-K.K) * K.P_minus;
 
 
-function[handles] = state_estimator(handles,frame_no,i,j, direction)
+function[handles] = state_estimator(handles,frame_no,prev_frame_no, direction)
+
+i = 1; j = 1;
 % the state here is [1x2], consisting of:
 % 1. horizontal position superficial attachment point
 % 2. fascicle angle
@@ -1763,8 +1753,13 @@ geofeatures = handles.geofeatures;
 n = handles.vidWidth;
 
 %% Aponeurosis
-APO_prev = [handles.Region(i).ROIx{frame_no-1} handles.Region(i).ROIy{frame_no-1}];
-APO_new = transformPointsForward(w, APO_prev);
+APO_prev = [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}];
+
+if strcmp(direction,'forward')
+    APO_new = transformPointsForward(w, APO_prev);
+else
+    APO_new = transformPointsInverse(w, APO_prev);
+end
 
 % We already have the apriori estimate, because we transformed points
 % forward using the warp matrix
@@ -1774,7 +1769,7 @@ k.x_minus = APO_new(:,2);
 k.y = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
 
 % previous estimate covariance
-k.P_prev = handles.Region(i).ROIp{frame_no-1};
+k.P_prev = handles.Region(i).ROIp{prev_frame_no};
 
 % get the process noise and measurement noise covariance
 [k.R, k.Q] = get_RQ_aponeurosis(handles, frame_no, i, j);
@@ -1788,11 +1783,15 @@ handles.Region(i).ROIp{frame_no} = K.P_plus;
 
 %% Fascicle
 % Fascicle - Aponeurosis intersection points from optical flow
-fas_prev = [handles.Region(i).Fascicle(j).fas_x{frame_no-1}' handles.Region(i).Fascicle(j).fas_y{frame_no-1}'];
-alpha_prev = handles.Region(i).Fascicle(j).alpha{frame_no-1};
+fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
+alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
 
 % Apply the warp
-fas_new = transformPointsForward(w, fas_prev);
+if strcmp(direction,'forward')
+    fas_new = transformPointsForward(w, fas_prev);
+else
+    fas_new = transformPointsInverse(w, fas_prev);
+end
 
 % Estimate the change in fascicle angle from the change in points
 dalpha = abs(atan2d(diff(fas_new(:,2)), diff(fas_new(:,1)))) - abs(atan2d(diff(fas_prev(:,2)), diff(fas_prev(:,1))));
@@ -1803,7 +1802,7 @@ x_minus = [fas_new(2,1) alpha_new];
 
 % previous estimate covariance
 handles.Region(i).Fascicle(j).fas_p{1} = [10 5];
-P_prev = handles.Region(i).Fascicle(j).fas_p{frame_no-1};
+P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
 
 % current aponeurosis
 ROI = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
@@ -1833,7 +1832,7 @@ fasy2 = super_coef(2) + S.x_plus*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
-[f.R, f.Q] = get_RQ_fascicle(handles, frame_no, i, j);
+[f.R, f.Q] = get_RQ_fascicle(handles, frame_no, prev_frame_no);
 
 % apriori estimate from optical flow
 f.x_minus = x_minus(2);
@@ -2003,7 +2002,7 @@ TimTrack.thickness      = geofeatures.thickness;
 TimTrack.alpha.median    = geofeatures.alpha;
 
 % --- Executes on button press in Auto_Detect.
-function Auto_Detect_Callback(hObject, eventdata, handles)
+function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % hObject    handle to Auto_Detect (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -2094,7 +2093,7 @@ for i = 1:size(handles.Region,2)
     handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
     if i == 1
-        scalar = handles.ID;%/handles.vidHeight;
+        scalar = handles.ID/handles.vidHeight;
         handles.CIm = handles.Im;
     end
 
@@ -2225,20 +2224,21 @@ for f = 2:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
         for j = 1:length(handles.Region(i).Fascicle)
             % state estimation
-            handles = state_estimator(handles,f,i,j,'forward');
+            handles = state_estimator(handles,f,f-1,'forward');
+            
         end
     end
 end
 
 % backward state estimation
-% for f = get(handles.frame_slider,'Max'):-1:1
-%     for i = 1:length(handles.Region)
-%         for j = 1:length(handles.Region(i).Fascicle)
-%             % state estimation
-%             handles = state_estimator(handles,f,i,j,'backward');
-%         end
-%     end
-% end
+for f = (get(handles.frame_slider,'Max')-1):-1:1
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
+            % state estimation
+            handles = state_estimator(handles,f,f+1,'backward');
+        end
+    end
+end
 
 % create analyzed images
 % pre-allocate ImTrack if it doesn't exist yet
@@ -2498,6 +2498,35 @@ handles.X = str2double(get(hObject,'String'));
 guidata(hObject, handles);
 
 
+function ImCropped = autocrop_Tim(Im)
+
+dIm = sum(abs(diff(Im,1, 3)),3);
+
+ndIm = dIm / max(dIm(:));
+
+th = .05;
+ndIm(ndIm>th) = 1;
+ndIm(ndIm<=th)= 0;
+
+BW2 = bwareaopen(ndIm,50);
+% 
+% figure(10)
+% imshow(BW2, [])
+
+% Find connected components in the filtered matrix.
+stats = regionprops(BW2, 'BoundingBox');
+
+% Extract the bounding box information.
+boundingBoxes = cat(1, stats.BoundingBox);
+
+% Calculate the overall bounding box that encompasses all smaller bounding boxes.
+B = round([min(boundingBoxes(:, 1)), min(boundingBoxes(:, 2)), ...
+    max(boundingBoxes(:, 1) + boundingBoxes(:, 3)) - min(boundingBoxes(:, 1)), ...
+    max(boundingBoxes(:, 2) + boundingBoxes(:, 4)) - min(boundingBoxes(:, 2))]);
+
+ImCropped = Im(B(2):(B(2)+B(4)-1), B(1):(B(1)+B(3)-1),:);
+
+
 % --- Function for detecting borders of the images and returning the rect matrix to crop.
 function boundToCrop = autocrop(frames,FrameRate)
 % hObject    handle to crop (see GCBO)
@@ -2625,3 +2654,69 @@ handles.R = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes on button press in Process_folder.
+function Process_folder_Callback(hObject, eventdata, handles)
+% hObject    handle to Process_folder (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles.fname = 'short_clip_low.mp4';
+handles.pname = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\';
+cd(handles.pname)
+handles.movObj = VideoReader([handles.pname handles.fname]);
+mb = waitbar(0,'Loading Video....');
+
+% get info
+handles.vidHeight = handles.movObj.Height;
+handles.vidWidth = handles.movObj.Width;
+handles.NumFrames = handles.movObj.NumFrames;
+handles.FrameRate = handles.movObj.FrameRate;
+
+i=1;
+
+% start clean
+if isfield(handles,'ImTrack')
+    handles = rmfield(handles, 'ImTrack');
+end
+if isfield(handles,'ImStack')
+    handles = rmfield(handles, 'ImStack');
+end
+if isfield(handles,'ImStackOr')
+    handles = rmfield(handles, 'ImStackOr');
+end
+
+handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+
+while hasFrame(handles.movObj)
+    waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
+    if regexp(handles.movObj.VideoFormat,'RGB')
+        handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
+    else
+        handles.ImStack(:,:,i) = readFrame(handles.movObj);
+    end
+
+     handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
+    i=i+1;
+end
+
+waitbar(1,mb)
+close(mb)
+
+cd(handles.pname)
+
+% update the image axes using show_image function (bottom)
+clear_fascicle_Callback(hObject, eventdata, handles);
+
+handles.ImStackOr = handles.ImStack;
+
+guidata(hObject, handles);
+show_image(hObject,handles);
+
+
+AutoCrop_Callback(hObject, eventdata, handles)
+
+process_all_Callback(hObject, eventdata, handles)
+
+save_video_Callback(hObject, eventdata, handles)
