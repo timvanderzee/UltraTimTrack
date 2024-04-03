@@ -258,7 +258,7 @@ else
                 handles = rmfield(handles, 'ImStackOr');
             end
             
-            handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+            handles.ImStack  = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
             
             while hasFrame(handles.movObj)
                 waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
@@ -318,6 +318,8 @@ set(handles.filename,'String',[handles.pname handles.fname])
 % set the string in the frame_number box to the current frame value (1)
 set(handles.frame_number,'String',num2str(1))
 
+handles.start_frame = 1;
+
 % set the limits on the slider - use number of frames to set maximum (min =
 % 1)
 set(handles.frame_slider,'Min',1);
@@ -364,6 +366,7 @@ if exist('TrackingData','var')
     if strcmp(chkload,'Yes')
 
         handles.Region = TrackingData.Region;
+        handles.start_frame = TrackingData.start_frame;
         handles.NumFrames = TrackingData.NumFrames;
         set(handles.frame_slider,'Min',1);
         set(handles.frame_slider,'Max',handles.NumFrames);
@@ -376,13 +379,21 @@ end
 
 cd(handles.pname)
 
+%already set these things as they won't be changed, and they just take up
+%time for plotting
+axes(handles.axes1)
+axis off auto
+set(handles.axes1,'Ydir','reverse','box','off') %necessary because of hold on
+colormap(gray(256))
+
 % update the image axes using show_image function (bottom)
 clear_fascicle_Callback(hObject, eventdata, handles);
 
 handles.ImStackOr = handles.ImStack;
 
 guidata(hObject, handles);
-show_image(hObject,handles);
+%show_image(hObject,handles); %not necessary as clear_fascicle_callback is
+%called above
 waitbar(1,mb)
 close(mb)
 
@@ -407,6 +418,9 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
 
     frame_no = round(get(handles.frame_slider,'Value'));
 
+    handles.start_frame = frame_no + handles.start_frame;
+
+    handles.NumFrames = handles.NumFrames-handles.start_frame+1;
 
     set(handles.frame_slider,'Min',1);
     set(handles.frame_slider,'Max',handles.NumFrames);
@@ -524,10 +538,11 @@ if get(handles.autorun_but,'BackgroundColor') == [0 1 0]
 end
 
 % --- Executes on button press in clear_fascicle.
-function[handles] = clear_fascicle_Callback(hObject, eventdata, handles)
+function clear_fascicle_Callback(hObject, eventdata, handles)
 % hObject    handle to clear_fascicle (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+axes(handles.axes1)
 
 if isfield(handles,'ImStack')
     if isfield(handles,'Region')
@@ -638,7 +653,7 @@ guidata(hObject, handles);
 
 
 % --------------------------------------------------------------------
-function[handles] = menu_clear_tracking_Callback(hObject, eventdata, handles)
+function menu_clear_tracking_Callback(hObject, eventdata, handles)
 % hObject    handle to menu_clear_tracking (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -663,7 +678,7 @@ end
 
 
 % --------------------------------------------------------------------
-function[handles] = AutoCrop_Callback(hObject, eventdata, handles)
+function AutoCrop_Callback(hObject, eventdata, handles)
 % hObject    handle to AutoCrop (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -694,7 +709,7 @@ handles.vidWidth = size(handles.ImStack,2);
 %     show_image(hObject,handles);
 %     axis tight
 
-handles = menu_clear_tracking_Callback(hObject, eventdata, handles);
+menu_clear_tracking_Callback(hObject, eventdata, handles)
 
 % Update handles structure
 guidata(hObject, handles);
@@ -711,7 +726,7 @@ function menu_crop_image_Callback(hObject, eventdata, handles)
 if isfield(handles,'ImStack')
 
     % define current axes
-    set(handles.axes1)
+    %set(handles.axes1)
     axes(handles.axes1)
 
     % use imcrop tool to determine croppable area
@@ -735,7 +750,7 @@ if isfield(handles,'ImStack')
     cla
     % update the image axes using show_image function (bottom)
     show_image(hObject,handles);
-    axis tight
+    %axis tight
     
     guidata(hObject, handles);
 
@@ -791,7 +806,10 @@ if isfield(handles,'Region')
 
         if isfield(handles,'ImStack') && isfield(handles.Region(i),'fas_length')
 
-            time = handles.Time;
+            dt = 1/handles.FrameRate;
+            %time = (dt:dt:length(handles.Region(i).fas_length)*dt)+((handles.start_frame-1)*dt);
+            time = handles.Time(handles.start_frame:handles.start_frame + length(handles.Region(i).fas_length)-1);
+
 
             %determine any non-zero entries in fascicle length array
             nz = logical(handles.Region(i).fas_length(:,1) ~= 0);
@@ -974,32 +992,48 @@ function save_video_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+
 if isfield(handles,'ImStack')
-    spos = [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)];
-    dpos = [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)];
-
-    handles.ImTrack(spos(2):(spos(2)+spos(4)),spos(1):spos(3),3,:) = 230;
-    handles.ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):dpos(3),2,:) = 230;
-
-
 %     [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
 %     
-    filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
+    filename = [handles.pname, handles.fname(1:end-4), '_analyzed'];
     vidObj = VideoWriter(filename,'MPEG-4');
+%    vidObj.Quality = 90; %default 75%
     vidObj.FrameRate = handles.FrameRate;
     open(vidObj);
 
 %     if FI > 0
 
         h = waitbar(0,['Saving frame 1/', num2str(handles.NumFrames)],'Name','Saving to video file...');
-        
-        for i = 1:1:get(handles.frame_slider,'Max')
 
-            F = handles.ImTrack(:,:,:,i);
+        for frame_no = 1:1:get(handles.frame_slider,'Max')
+
+            %re-write pixel of the true image
+            handles.curr_Img(:,handles.d+1 : handles.d+size(handles.ImStack,2)) = handles.ImStack(:,:,frame_no);
+            F = handles.curr_Img;
+
+            %Fascicle
+            F = insertShape(F ,'line',[handles.Region(1).Fascicle(1).fas_x{frame_no}(1)+handles.d, handles.Region(1).Fascicle(1).fas_y{frame_no}(1), ...
+                handles.Region(1).Fascicle(1).fas_x{frame_no}(2)+handles.d,handles.Region(1).Fascicle(1).fas_y{frame_no}(2)], 'LineWidth',5, 'Color','red');
+            %ROI
+            F = insertShape(F,'Polygon',[handles.Region(1).ROIx{frame_no}(1)+handles.d, handles.Region(1).ROIy{frame_no}(1), ...
+                handles.Region(1).ROIx{frame_no}(2)+handles.d, handles.Region(1).ROIy{frame_no}(2),handles.Region(1).ROIx{frame_no}(3)+handles.d, handles.Region(1).ROIy{frame_no}(3),...
+                handles.Region(1).ROIx{frame_no}(4)+handles.d, handles.Region(1).ROIy{frame_no}(4),handles.Region(1).ROIx{frame_no}(5)+handles.d, handles.Region(1).ROIy{frame_no}(5)],'LineWidth',1, 'Color','red');
+
+            %
+            % F = insertShape(handles.ImStack(:,:,frame_no),'line',[handles.Region(1).Fascicle(1).fas_x{frame_no}(1), handles.Region(1).Fascicle(1).fas_y{frame_no}(1), ...
+            % handles.Region(1).Fascicle(1).fas_x{frame_no}(2),handles.Region(1).Fascicle(1).fas_y{frame_no}(2)], 'LineWidth',5, 'Color','red');
+            % 
+            % F = insertShape(F,'Polygon',[handles.Region(1).ROIx{frame_no}(1), handles.Region(1).ROIy{frame_no}(1), ...
+            % handles.Region(1).ROIx{frame_no}(2), handles.Region(1).ROIy{frame_no}(2),handles.Region(1).ROIx{frame_no}(3), handles.Region(1).ROIy{frame_no}(3),...
+            % handles.Region(1).ROIx{frame_no}(4), handles.Region(1).ROIy{frame_no}(4),handles.Region(1).ROIx{frame_no}(5), handles.Region(1).ROIy{frame_no}(5)],'LineWidth',1, 'Color','red');
+
+            %set(fh, 'CData',F);
+            %F = handles.ImTrack(:,:,:,i);
             writeVideo(vidObj,F)
             
-            frac_progress = i/handles.NumFrames;
-            waitbar(frac_progress,h, ['Processing frame ', num2str(i), '/', num2str(get(handles.frame_slider,'Max'))])
+            frac_progress = frame_no/handles.NumFrames;
+            waitbar(frac_progress,h, ['Processing frame ', num2str(frame_no), '/', num2str(get(handles.frame_slider,'Max'))])
 
         end
 %     end
@@ -1035,7 +1069,9 @@ if isfield(handles,'Region')
 
         if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack') && isfield(handles.Region(i),'fas_length')
 
-            time = handles.Time;
+            dt = 1/handles.FrameRate;
+            %time = (dt:dt:length(handles.Region(i).fas_length)*dt)+((handles.start_frame-1)*dt);
+            time = handles.Time(handles.start_frame:handles.start_frame + length(handles.Region(i).fas_length)-1);
 
             %determine any non-zero entries in fascicle length array
             nz = logical(handles.Region(i).fas_length(:,1) ~= 0);
@@ -1115,61 +1151,81 @@ if isfield(handles,'Region')
 
 
         if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack') && isfield(handles.Region(i),'fas_length')
-            
-            time = handles.Time;
+
+            dt = 1/handles.FrameRate;
+            %time = (dt:dt:length(handles.Region(i).fas_length)*dt)+((handles.start_frame-1)*dt);
+            time = handles.Time(handles.start_frame:handles.start_frame + length(handles.Region(i).fas_length)-1);
             %determine any non-zero entries in fascicle length array
             nz = logical(handles.Region(i).fas_length(:,1) ~= 0);
 
             T = time(nz)';
 
+            TrackingData.Region = rmfield(handles.Region,'ROI');% remove the ROI to reduce file size
+            TrackingData.start_frame = handles.start_frame;
             TrackingData.res = handles.ID;
             TrackingData.NumFrames = handles.NumFrames;
             %info about tracking for replication purposes
             TrackingData.ProcessingTime = handles.ProcessingTime; %two
             TrackingData.BlockSize = handles.BlockSize;
+            TrackingData.Gains = handles.fcor / handles.FrameRate; %[handles.apogain handles.posgain handles.fasgain];
             TrackingData.Parallel = handles.do_parfor.Value;
             TrackingData.info = "Processing [TimTrack; Opticflow], %%\nBlockSize [width; height], %%\nGains [Apo, Position, Angle]";
 
-            Fdat.Region(i).FL = handles.Region(i).fas_length(nz,:)';
-            Fdat.Region(i).PEN = handles.Region(i).fas_pen(nz,:)';
-            Fdat.Region(i).Time = time(nz);
+            if isfield(handles.Region(i),'fas_length_corr') && ~isempty(handles.Region(i).fas_length_corr)
+                Fdat.Region(i).FL = handles.Region(i).fas_length_corr(nz,:)';
+                Fdat.Region(i).PEN = handles.Region(i).fas_pen_corr(nz,:)';
+                Fdat.Region(i).Time = T';
+
+                for j = 1:size(handles.Region(i).fas_length_corr,2)
+                    if sum(handles.Region(i).fas_length_corr(nz,j)) == 0
+
+                        Fdat.Region(i).FL(j,:) = handles.Region(i).fas_length(nz,j)';
+                        Fdat.Region(i).PEN(j,:) = handles.Region(i).fas_pen(nz,j)';
+
+                    end
+                end
+
+            else
+                Fdat.Region(i).FL = handles.Region(i).fas_length(nz,:)';
+                Fdat.Region(i).PEN = handles.Region(i).fas_pen(nz,:)';
+                Fdat.Region(i).Time = time(nz);
+            end
 
         end
     end
 end
 
-filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
-save(filename,'TrackingData','Fdat');
-% [~,handles.file,handles.ext] = fileparts(handles.fname);
-% fileout_suggest = [handles.pname handles.file '.mat'];
-% [fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
-% cd(pathout);
-% 
-% if exist([pathout fileout], 'file') == 2
-% 
-%     if exist('Data','var') && exist('Fdat','var')
-%         save(fileout,'-append','Fdat','Data','TrackingData')
-%     elseif exist('Fdat','var')
-%         save(fileout,'-append','Fdat','TrackingData')
-%     elseif exist('Data','var')
-%         save(fileout,'-append','Data')
-%     else
-%         warndlg('There was no data to save', 'WARNING!')
-%     end
-% 
-% else
-% 
-%     if exist('Data','var') && exist('Fdat','var')
-%         save(fileout,'Fdat','Data','TrackingData')
-%     elseif exist('Fdat','var')
-%         save(fileout,'Fdat','TrackingData')
-%     elseif exist('Data','var')
-%         save(fileout,'Data')
-%     else
-%         warndlg('There was no data to save', 'WARNING!')
-%     end
 
-% end
+[~,handles.file,handles.ext] = fileparts(handles.fname);
+fileout_suggest = [handles.pname handles.file '.mat'];
+[fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
+cd(pathout);
+
+if exist([pathout fileout], 'file') == 2
+
+    if exist('Data','var') && exist('Fdat','var')
+        save(fileout,'-append','Fdat','Data','TrackingData')
+    elseif exist('Fdat','var')
+        save(fileout,'-append','Fdat','TrackingData')
+    elseif exist('Data','var')
+        save(fileout,'-append','Data')
+    else
+        warndlg('There was no data to save', 'WARNING!')
+    end
+
+else
+
+    if exist('Data','var') && exist('Fdat','var')
+        save(fileout,'Fdat','Data','TrackingData')
+    elseif exist('Fdat','var')
+        save(fileout,'Fdat','TrackingData')
+    elseif exist('Data','var')
+        save(fileout,'Data')
+    else
+        warndlg('There was no data to save', 'WARNING!')
+    end
+
+end
 
 
 % --- Executes on key press with focus on figure1 and none of its controls.
@@ -1264,6 +1320,7 @@ menu_clear_tracking_Callback(hObject, eventdata, handles)% clear any current tra
 load([pname fname],'TrackingData');
 
 handles.Region = TrackingData.Region;
+handles.start_frame = TrackingData.start_frame;
 handles.NumFrames = TrackingData.NumFrames;
 set(handles.frame_slider,'Min',1);
 set(handles.frame_slider,'Max',handles.NumFrames);
@@ -1405,34 +1462,55 @@ end
 % Function to show image with appropriate image processing
 %---------------------------------------------------------
 function handles = show_image(hObject, handles)
-
+%tic
 if isfield(handles,'ImStack')
     % find current frame number from slider
-    frame_no = round(get(handles.frame_slider,'Value'));
+    frame_no = round(get(handles.frame_slider,'Value'));  
+    axes(handles.axes1)
+    % show the fascicle and the ROI
+    if isfield(handles,'Region') && numel(handles.Region.ROIx) >= frame_no %put that it checks whether it is empty or not because in that frame maybe it is
 
-    % show the image
-    if isfield(handles,'ImStack')
+        %re-write pixel of the true image
+        handles.curr_Img(:,handles.d+1 : handles.d+size(handles.ImStack,2)) = handles.ImStack(:,:,frame_no);
+        Im = handles.curr_Img;
+
+        %ORIGINAL SOLUTION but fascicle are truncated according to size of
+        %Image
+       %  Im = insertShape(handles.ImStack(:,:,frame_no),'line',[handles.Region(1).Fascicle(1).fas_x{frame_no}(1), handles.Region(1).Fascicle(1).fas_y{frame_no}(1), ...
+       %  handles.Region(1).Fascicle(1).fas_x{frame_no}(2),handles.Region(1).Fascicle(1).fas_y{frame_no}(2)], 'LineWidth',5, 'Color','red');
+       % %    ROI
+        % Im = insertShape(handles.ImStack(:,:,frame_no),'Polygon',[handles.Region(1).ROIx{frame_no}(1), handles.Region(1).ROIy{frame_no}(1), ...
+        %      handles.Region(1).ROIx{frame_no}(2), handles.Region(1).ROIy{frame_no}(2),handles.Region(1).ROIx{frame_no}(3), handles.Region(1).ROIy{frame_no}(3),...
+        %      handles.Region(1).ROIx{frame_no}(4), handles.Region(1).ROIy{frame_no}(4),handles.Region(1).ROIx{frame_no}(5), handles.Region(1).ROIy{frame_no}(5)],'LineWidth',1, 'Color','red');
+        % 
+        %line(handles.Region(1).Fascicle(1).fas_x{frame_no}, handles.Region(1).Fascicle(1).fas_y{frame_no},'Color',[1 0 0],'linew',5)
+        %
         
-        if isfield(handles,'ImTrack')
-            Im = handles.ImTrack(:,:,:,frame_no);
-        else
-            Im = handles.ImStack(:,:,frame_no);
-        end
+        %Fascicle
+        Im = insertShape(Im ,'line',[handles.Region(1).Fascicle(1).fas_x{frame_no}(1)+handles.d, handles.Region(1).Fascicle(1).fas_y{frame_no}(1), ...
+           handles.Region(1).Fascicle(1).fas_x{frame_no}(2)+handles.d,handles.Region(1).Fascicle(1).fas_y{frame_no}(2)], 'LineWidth',5, 'Color','red');
+        %ROI
+        Im = insertShape(Im,'Polygon',[handles.Region(1).ROIx{frame_no}(1)+handles.d, handles.Region(1).ROIy{frame_no}(1), ...
+           handles.Region(1).ROIx{frame_no}(2)+handles.d, handles.Region(1).ROIy{frame_no}(2),handles.Region(1).ROIx{frame_no}(3)+handles.d, handles.Region(1).ROIy{frame_no}(3),...
+           handles.Region(1).ROIx{frame_no}(4)+handles.d, handles.Region(1).ROIy{frame_no}(4),handles.Region(1).ROIx{frame_no}(5)+handles.d, handles.Region(1).ROIy{frame_no}(5)],'LineWidth',1, 'Color','red');
+        
+        
+        set(handles.image, 'CData',Im); 
+        axis auto
+        %insert fascicle line
+        %hold off
 
-        if ~isfield(handles, 'image') || ~isvalid(handles.image)
-            axes(handles.axes1)
-            handles.image = image(Im);
-            colormap(gray(256));
-            axis off;
-            axis equal
-
-        else
-            set(handles.image, 'CData',Im);         
-        end
+    else
+        Im = handles.ImStack(:,:,frame_no);
+        handles.image = image(Im);
+        %hold on
+        axis off
     end
-    
-    % if we're showing original, show the aponeurosis regions
-    if ~isfield(handles,'ImTrack') && (~isfield(handles, 'S') || ~isvalid(handles.S))
+
+    % if we're showing original, show the aponeurosis regions (only when
+    % there is no fascicle tracked --> region exists only when the fascicle
+    % is defined. So no need of Imtrack
+    if ~isfield(handles,'Region') && (~isfield(handles, 'S') || ~isvalid(handles.S))
         handles.S = images.roi.Rectangle(gca,'position', [1 1 handles.vidWidth .3*handles.vidHeight],'color','blue');
         handles.D = images.roi.Rectangle(gca,'position', [1 .5*handles.vidHeight handles.vidWidth .4*handles.vidHeight],'color','green');
     end
@@ -1466,11 +1544,12 @@ if isfield(handles,'ImStack')
 
     % Update handles structure
     guidata(hObject, handles);
-
+    
+%toc
 end
 
 % --- Executes on button press in process_all.
-function[handles] = process_all_Callback(hObject, eventdata, handles)
+function process_all_Callback(hObject, eventdata, handles)
 % hObject    handle to process_all (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -1545,15 +1624,15 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 %         pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',10,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
         initialize(pointTracker,points,im1);
 
-        for f = 2:handles.NumFrames
+        for f = frame_no+1:get(handles.frame_slider,'Max')
             % Get the current image
-            im2 = handles.ImStack(:,:,f);
+            im2 = handles.ImStack(:,:,handles.start_frame+f-1);
             handles.NIm = im2;
 
             % Compute the flow and new roi
             [pointsNew, isFound] = step(pointTracker, im2);
             [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
-            handles.Region(i).warp(:,:,f-1) = w;
+            handles.Region(i).warp(:,:,f) = w;
 
             for j = 1:length(handles.Region(i).Fascicle)
 
@@ -1569,6 +1648,13 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 
             end
 
+%                 scalar = handles.ID;%/handles.vidHeight;
+% 
+%                 handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
+%                 diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
+        
+         
+% toc
 %             profile viewer
             frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
             waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
@@ -1629,8 +1715,8 @@ if isfield(handles,'ImStack')
             
             tstart = tic;
             parfor f = frames             
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                 WaitMessage.Send; %update waitbar parfor
             end
             WaitMessage.Destroy(); %update waitbar parfor
@@ -1643,8 +1729,8 @@ if isfield(handles,'ImStack')
             hwb = waitbar(0,'','Name','Running TimTrack...');
             for f = frames
 
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
                 waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
 
             end
@@ -1664,138 +1750,32 @@ if isfield(handles,'ImStack')
     end
 end
 
-function[handles] = estimate_variance(hObject, eventdata, handles)
-
-handles.Frequency = 2;
-
-Wn = 1.5*handles.Frequency / (.5 * handles.FrameRate);
-[b,a] = butter(2, Wn);
-
-x = nan(handles.NumFrames,2);
-for f = 1:handles.NumFrames
-    x(f,1) = handles.geofeatures(f).alpha;
-    x(f,2) = handles.geofeatures(f).thickness;
-%     x(i,2) = handles.geofeatures(i).alpha.median;
-end
- 
-y = nan(size(x));
-for i = 1:2
-    y(:,i) = filtfilt(b,a,x(:,i));
-end
-
-handles.Qmax = asind(handles.Q/mean(x(:,2)));
-handles.R = std(x-y);
-
-function[handles] = do_state_estimation(hObject, eventdata, handles)
-% hObject    handle to do_state_estimation (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% get Qmax
-handles = estimate_variance(hObject, eventdata, handles);
-
-% start with the original
-% for f = 1:get(handles.frame_slider,'Max')
-%     for i = 1:length(handles.Region)
-%         for j = 1:length(handles.Region(i).Fascicle)
-%             handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
-%             handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
-%         end
-%     end
-% end
-
-% forward state estimation
-for f = 2:get(handles.frame_slider,'Max')
-    for i = 1:length(handles.Region)
-        for j = 1:length(handles.Region(i).Fascicle)
-            % state estimation
-            handles = state_estimator(handles,f,f-1,'forward');
-        end
-    end
-end
-
-% backward state estimation
-% for f = (get(handles.frame_slider,'Max')-1):-1:1
-%     for i = 1:length(handles.Region)
-%         for j = 1:length(handles.Region(i).Fascicle)
-%             % state estimation
-%             handles = state_estimator(handles,f,f+1,'backward');
-%         end
-%     end
-% end
-
-% create analyzed images
-% pre-allocate ImTrack if it doesn't exist yet
-if ~isfield(handles, 'ImTrack')
-    handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,1)*2, 3, size(handles.ImStack,3), 'uint8');
-end
-
-% create analyzed frame
-d = round(size(handles.ImStack,2)/2);
-
-ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
-ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
-      
-h = waitbar(0,['Estimating frame 1/', num2str(handles.NumFrames)],'Name','Performing state estimation...');
-
-for f = 1:get(handles.frame_slider,'Max')
-    for i = 1:length(handles.Region)
-        for j = 1:length(handles.Region(i).Fascicle)
-            
-            % add padding
-            currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
-                  
-%             tic
-            % add fascicle
-            currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
-            handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
-        
-            currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
-                handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
-        
-            % add ROI
-            currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
-            handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
-            handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
-        
-%         toc
-            % save
-            handles.ImTrack(:,:,:,f) = currentImage;
-            
-            frac_progress = f/handles.NumFrames;
-            waitbar(frac_progress,h, ['Estimating frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
-        end
-    end
-end
-
-close(h)
-
-show_image(hObject, handles);
-show_data(hObject, handles);
-guidata(hObject, handles);
-
-
 function[R, Q] = get_RQ_super_apo_point(handles, frame_no, i, j)
 Q = handles.Q;
 R = handles.X;
 
 function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
 Q = handles.Q;
-R = handles.R(2);
+R = handles.R;
 
 function[R, Q] = get_RQ_fascicle(handles, frame_no,prev_frame_no)
 i= 1; j= 1;
 % Optical flow is more reliable at small angles, because optical flow is
 % mostly horizontal shear and (errors in) horizontal shear affect the
 % fascicle less if its oriented more horizontally
-dalpha = handles.Region(i).Fascicle(j).dalpha(frame_no);
-
-sigmoid = @(x) 1./(1+exp(-1000*(x-0.01)));
-
-Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{prev_frame_no}) * sigmoid(dalpha);
+Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{prev_frame_no});
 
 % TimTrack is more reliable if alpha estimates are similar
-R = handles.R(1);
+R = handles.geofeatures(frame_no).alpha.sigma;
+
+function[handles] = get_Qmax(hObject, eventdata, handles)
+
+for i = 1:handles.NumFrames
+    t(i) = handles.geofeatures(i).thickness;
+end
+
+handles.Qmax = asind(handles.Q/mean(t));
+
 
 function [K] = run_kalman_filter(k)
 % this assumes we already have the aposteriori state estimate (k.x_minus),
@@ -1821,7 +1801,7 @@ i = 1; j = 1;
 % 1. horizontal position superficial attachment point
 % 2. fascicle angle
 
-w = handles.Region(i).warp(:,:,prev_frame_no);
+w = handles.Region(i).warp(:,:,frame_no);
 geofeatures = handles.geofeatures;
 n = handles.vidWidth;
 
@@ -1884,9 +1864,6 @@ deep_apo    = ROI([2,3],:);
 super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
-% save the change in alpha from optical flow
-handles.Region(i).Fascicle(j).dalpha(frame_no) = dalpha;
-
 %% State estimation superficial aponeurosis attachment
 % get the process noise and measurement noise covariance
 [s.R, s.Q] = get_RQ_super_apo_point(handles, frame_no, i, j);
@@ -1903,11 +1880,8 @@ s.P_prev = P_prev(1);
 % run kalman filter
 S = run_kalman_filter(s);
 
-% ascribe
-fasx2 = S.x_plus;
-
 % get the vertical point from the estimated aponeurosis
-fasy2 = super_coef(2) + fasx2*super_coef(1);
+fasy2 = super_coef(2) + S.x_plus*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
@@ -1917,7 +1891,7 @@ fasy2 = super_coef(2) + fasx2*super_coef(1);
 f.x_minus = x_minus(2);
 
 % measurement from Hough transform
-f.y = handles.geofeatures(frame_no).alpha;
+f.y = handles.geofeatures(frame_no).alpha.mu;
 
 % previous state covariance
 f.P_prev = P_prev(2);
@@ -1934,7 +1908,7 @@ fasy1 = deep_coef(2) + fasx1*deep_coef(1);
 %% update
 % state and dependent variables
 handles.Region(i).Fascicle(j).alpha{frame_no}   = F.x_plus;
-handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 fasx2];
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 S.x_plus];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
 
 % state covariance
@@ -1955,6 +1929,50 @@ handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{fram
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
 
+function handles = apply_transform(handles,frame_no,prev_frame_no,i,j)
+% function to perform transformation (warp) of the points
+
+% extract the warp matrix
+w = handles.Region(i).warp(:,:,frame_no);
+
+% ROI
+ROIpos = transformPointsForward(w, [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}]);
+ROIpos(:,1) = handles.Region(i).ROIx{prev_frame_no};
+
+[handles.Region(i).ROI{frame_no},handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no}] = roipoly(handles.NIm, ROIpos(:,1), ROIpos(:,2));
+
+% Adjust the ROI if it goes outside the image
+handles.Region(i).ROIy{frame_no}(handles.Region(i).ROIy{frame_no} > handles.vidHeight) = handles.vidHeight;
+handles.Region(i).ROIy{frame_no}(handles.Region(i).ROIy{frame_no} < 1) = 1;
+
+%% Fascicle
+% loop through all fasicles defined for the region and apply
+% the warp and calculate new fascicle length
+
+% book keeping
+handles.Region(i).Fascicle(j).current_xy(1,1) = handles.Region(i).Fascicle(j).fas_x{prev_frame_no}(1);
+handles.Region(i).Fascicle(j).current_xy(1,2) = handles.Region(i).Fascicle(j).fas_y{prev_frame_no}(1);
+handles.Region(i).Fascicle(j).current_xy(2,1) = handles.Region(i).Fascicle(j).fas_x{prev_frame_no}(2);
+handles.Region(i).Fascicle(j).current_xy(2,2) = handles.Region(i).Fascicle(j).fas_y{prev_frame_no}(2);
+
+% actual transform
+handles.Region(i).Fascicle(j).new_xy = transformPointsForward(w, handles.Region(i).Fascicle(j).current_xy);
+
+% update
+handles.Region(i).Fascicle(j).current_xy = handles.Region(i).Fascicle(j).new_xy;
+
+% define Hough variables
+handles.Region(i).Fascicle(j).fas_xy_Hough{frame_no} = [];
+
+% more book keeping
+handles.Region(i).Fascicle(j).fas_x{frame_no}(1) = handles.Region(i).Fascicle(j).current_xy(1,1);
+handles.Region(i).Fascicle(j).fas_y{frame_no}(1) = handles.Region(i).Fascicle(j).current_xy(1,2);
+handles.Region(i).Fascicle(j).fas_x{frame_no}(2) = handles.Region(i).Fascicle(j).current_xy(2,1);
+handles.Region(i).Fascicle(j).fas_y{frame_no}(2) = handles.Region(i).Fascicle(j).current_xy(2,2);
+
+% save the original (never changes)
+handles.Region(i).Fascicle(j).fas_x_original{frame_no} = handles.Region(i).Fascicle(j).fas_x{frame_no};
+handles.Region(i).Fascicle(j).fas_y_original{frame_no} = handles.Region(i).Fascicle(j).fas_y{frame_no};
 
 function[TimTrack] = get_fascicle_angle(data, parms)
 
@@ -1964,32 +1982,32 @@ geofeatures = auto_ultrasound(data, parms);
 % TimTrack.alpha.mu = geofeatures.alpha;
 % TimTrack.alpha.sigma = std(geofeatures.alphas);
 
-% a = parms.fas.range(2):-parms.fas.thetares:parms.fas.range(1);
-% w = geofeatures.hs;
+a = parms.fas.range(2):-parms.fas.thetares:parms.fas.range(1);
+w = geofeatures.hs;
 
 % help the optimization by adding some values
-% A = a;
-% W = w;
-% 
-% sine_fun = @(c, k) -diff(k)/2 * cos(c) + mean(k);
-% norm_fun = @(c, x, k) c(1)*exp(-(x-sine_fun(c(2), k)).^2/(2*c(3)^2)) + c(4);
-% cost_fun = @(c, x, k, y) sum((y - norm_fun(c,x,k)).^2);
-% 
-% % bound on fascicle angle
-% k = [5 80];
-% 
-% alpha0 = max(k(1), geofeatures.alpha);
-% 
-% C0 = [max(w)-min(w) acos((alpha0-mean(k))/(-diff(k)/2)) std(geofeatures.alphas) min(w)];
-% C = fminsearch(@(p) cost_fun(p, A, k, W), C0);
-% 
-% % update estimate
-% TimTrack.alpha.A = C(1);
-% TimTrack.alpha.mu = sine_fun(C(2),k);
-% TimTrack.alpha.sigma = abs(C(3));
-% TimTrack.alpha.b = C(4);
-% TimTrack.alpha.y = w;
-% TimTrack.alpha.x = a;
+A = a;
+W = w;
+
+sine_fun = @(c, k) -diff(k)/2 * cos(c) + mean(k);
+norm_fun = @(c, x, k) c(1)*exp(-(x-sine_fun(c(2), k)).^2/(2*c(3)^2)) + c(4);
+cost_fun = @(c, x, k, y) sum((y - norm_fun(c,x,k)).^2);
+
+% bound on fascicle angle
+k = [5 80];
+
+alpha0 = max(k(1), geofeatures.alpha);
+
+C0 = [max(w)-min(w) acos((alpha0-mean(k))/(-diff(k)/2)) std(geofeatures.alphas) min(w)];
+C = fminsearch(@(p) cost_fun(p, A, k, W), C0);
+
+% update estimate
+TimTrack.alpha.A = C(1);
+TimTrack.alpha.mu = sine_fun(C(2),k);
+TimTrack.alpha.sigma = abs(C(3));
+TimTrack.alpha.b = C(4);
+TimTrack.alpha.y = w;
+TimTrack.alpha.x = a;
 
 % norm_fun = @(c, mu, x) c(1)*exp(-(x-mu).^2/(2*c(2)^2)) + c(3);
 % cost_fun = @(c, x, mu, y) sum((y - norm_fun(c,mu, x)).^2);
@@ -2016,17 +2034,17 @@ geofeatures = auto_ultrasound(data, parms);
 % plot(A, norm_fun(C, mu, A), 'b-', 'LineWidth', 2)
 
 %% recalc fas_coef
-% m = size(data,2);
-%     
-% Mx = round(m/2);
-% My = mean([polyval(geofeatures.deep_coef, Mx) polyval(geofeatures.super_coef, Mx)]);
-% 
-% geofeatures.fas_coef(1) = -tand(TimTrack.alpha.mu);
-% geofeatures.fas_coef(2) =  My - Mx * geofeatures.fas_coef(1);
-% 
-% cost = @(x, super_coef, deep_coef, fas_coef, Mx) max([(Mx - (x-deep_coef(2)) / (deep_coef(1)-fas_coef(1))).^2  (Mx - (x-super_coef(2)) / (super_coef(1)-fas_coef(1))).^2]);
-% 
-% geofeatures.fas_coef(2) = fminsearch(@(x) cost(x, geofeatures.super_coef, geofeatures.deep_coef, geofeatures.fas_coef, Mx), My - Mx * geofeatures.fas_coef(1));
+m = size(data,2);
+    
+Mx = round(m/2);
+My = mean([polyval(geofeatures.deep_coef, Mx) polyval(geofeatures.super_coef, Mx)]);
+
+geofeatures.fas_coef(1) = -tand(TimTrack.alpha.mu);
+geofeatures.fas_coef(2) =  My - Mx * geofeatures.fas_coef(1);
+
+cost = @(x, super_coef, deep_coef, fas_coef, Mx) max([(Mx - (x-deep_coef(2)) / (deep_coef(1)-fas_coef(1))).^2  (Mx - (x-super_coef(2)) / (super_coef(1)-fas_coef(1))).^2]);
+
+geofeatures.fas_coef(2) = fminsearch(@(x) cost(x, geofeatures.super_coef, geofeatures.deep_coef, geofeatures.fas_coef, Mx), My - Mx * geofeatures.fas_coef(1));
 
 %% update
 % scale back
@@ -2034,7 +2052,7 @@ TimTrack.super_coef     = geofeatures.super_coef;
 TimTrack.deep_coef      = geofeatures.deep_coef;
 TimTrack.fas_coef       = geofeatures.fas_coef;
 TimTrack.thickness      = geofeatures.thickness;
-TimTrack.alpha          = geofeatures.alpha;
+TimTrack.alpha.median    = geofeatures.alpha;
 
 % --- Executes on button press in Auto_Detect.
 function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
@@ -2047,22 +2065,8 @@ load('parms.mat','parms')
 % find current frame number from slider
 frame_no = round(get(handles.frame_slider,'Value'));
 
-if isfield(handles,'ImTrack')
-    w = size(handles.ImTrack,2);
-else
-    w = handles.vidWidth;
-end
-
-if ~isvalid(handles.S)
-    handles.S = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
-end
-
-if ~isvalid(handles.D)
-    handles.D = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
-end
-
 %% Aponeurosis detection
-axes(handles.axes1); 
+axes(handles.axes1); hold off
 
 % for jj = 1:2
 %     [~,apCentre] = ginputYellow(1);
@@ -2089,8 +2093,10 @@ parms.fas.thetares = 0.5;
 parms.apo.super.cut = [handles.S.Position(2) handles.S.Position(2)+handles.S.Position(4)] / handles.vidHeight;
 parms.apo.deep.cut = [handles.D.Position(2) handles.D.Position(2)+handles.D.Position(4)] / handles.vidHeight;
 
-set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
-set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+% set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+% set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+set(handles.S,'InteractionsAllowed','none','Visible','off')
+set(handles.D,'InteractionsAllowed','none','Visible','off')
 
 % max range
 parms.fas.range = 90 - [-90 89];
@@ -2102,14 +2108,13 @@ alphas = geofeatures.alphas;
 alphas(alphas==90 | alphas == 180) = [];
 % 
 if median(alphas) < 90 || isempty(alphas)
-    parms.fas.range = [5 80];
+    parms.fas.range = [1 80];
 else
-    parms.fas.range = [5 80] + 90;
+    parms.fas.range = [1 80] + 90;
 end
 
 % run TimTrack
-% geofeatures = get_fascicle_angle(data, parms);
-geofeatures = auto_ultrasound(data, parms);
+geofeatures = get_fascicle_angle(data, parms);
 handles.parms = parms;
 
 % scale
@@ -2163,41 +2168,46 @@ if isfield(handles, 'ImTrack')
 end
 
 % pre-allocate ImTrack
-if ~isfield(handles, 'ImTrack')
-    handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,2)*2, 3, size(handles.ImStack,3), 'uint8');
-end
+% if ~isfield(handles, 'ImTrack')
+%     handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,2)*2, 3, size(handles.ImStack,3), 'uint8');
+% end
 
 % create analyzed frame
-d = round(size(handles.ImStack,2)/2);
+%d = round(size(handles.ImStack,2)/2);
 
-f = frame_no;
+% create background bigger image for plotting purpose
+handles.d = ceil(size(handles.ImStack,2)/3);
+ZeroPad = ones(size(handles.ImStack,1), handles.d,'uint8')*240;       
+handles.curr_Img = [ZeroPad, handles.ImStack(:,:,frame_no), ZeroPad]; 
 
-ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
-ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
+%ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
+% %ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
+% 
+% for i = 1:length(handles.Region)
+%     for j = 1:length(handles.Region(i).Fascicle)
+% 
+%         %currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
+%         currentImage = handles.ImStack(:,:,f);
+%         % add fascicle
+%         currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1), handles.Region(i).Fascicle(j).fas_y{f}(1), ...
+%         handles.Region(i).Fascicle(j).fas_x{f}(2),handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
+% 
+%         % add ROI
+%         currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1), handles.Region(i).ROIy{f}(1), ...
+%         handles.Region(i).ROIx{f}(2), handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3), handles.Region(i).ROIy{f}(3),...
+%         handles.Region(i).ROIx{f}(4), handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5), handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
+% 
+%         % save
+%         handles.ImTrack(:,:,:,f) = currentImage;
+% 
+%     end
+% end
 
-for i = 1:length(handles.Region)
-    for j = 1:length(handles.Region(i).Fascicle)
-        
-        currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
-       
-        % add fascicle
-        currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
-        handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
+% set(handles.D, 'Position', [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)])
+% set(handles.S, 'Position', [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)])
 
-        % add ROI
-        currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
-        handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
-        handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
-
-        % save
-        handles.ImTrack(:,:,:,f) = currentImage;
-        
-    end
-end
-
-% show the region
-set(handles.D, 'Position', [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)])
-set(handles.S, 'Position', [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)])
+%set(handles.axes1)
+%hold on %for holding the polygons otherwise they lose the data
 
 % Update handles structure
 guidata(hObject, handles);
@@ -2252,6 +2262,95 @@ function do_parfor_Callback(hObject, eventdata, handles)
 handles.do_parfor = get(hObject,'Value');
 
 
+function[handles] = do_state_estimation(hObject, eventdata, handles)
+% hObject    handle to do_state_estimation (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% get Qmax
+handles = get_Qmax(hObject, eventdata, handles);
+
+% start with the original
+% for f = 1:get(handles.frame_slider,'Max')
+%     for i = 1:length(handles.Region)
+%         for j = 1:length(handles.Region(i).Fascicle)
+%             handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
+%             handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
+%         end
+%     end
+% end
+
+% forward state estimation
+for f = 2:get(handles.frame_slider,'Max')
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
+            % state estimation
+            handles = state_estimator(handles,f,f-1,'forward');
+            
+        end
+    end
+end
+
+% backward state estimation
+for f = (get(handles.frame_slider,'Max')-1):-1:1
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
+            % state estimation
+            handles = state_estimator(handles,f,f+1,'backward');
+        end
+    end
+end
+
+% create analyzed images
+% pre-allocate ImTrack if it doesn't exist yet
+% if ~isfield(handles, 'ImTrack')
+%     handles.ImTrack = zeros(size(handles.ImStack,1), size(handles.ImStack,1)*2, 3, size(handles.ImStack,3), 'uint8');
+% end
+
+% create analyzed frame
+% d = round(size(handles.ImStack,2)/2);
+% 
+% ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
+% ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
+% 
+% h = waitbar(0,['Estimating frame 1/', num2str(handles.NumFrames)],'Name','Performing state estimation...');
+% 
+% for f = 1:get(handles.frame_slider,'Max')
+%     for i = 1:length(handles.Region)
+%         for j = 1:length(handles.Region(i).Fascicle)
+% 
+%             % add padding
+%             currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
+% 
+% %             tic
+%             % add fascicle
+%             currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
+%             handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
+% 
+%             currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
+%                 handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
+% 
+%             % add ROI
+%             currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
+%             handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
+%             handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
+% 
+% %         toc
+%             % save
+%             handles.ImTrack(:,:,:,f) = currentImage;
+% 
+%             frac_progress = f/handles.NumFrames;
+%             waitbar(frac_progress,h, ['Estimating frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
+%         end
+%     end
+% end
+
+%close(h)
+
+show_image(hObject, handles);
+show_data(hObject, handles);
+guidata(hObject, handles);
+
 % --- Executes on button press in flipimage.
 function flipimage_Callback(hObject, eventdata, handles)
 % hObject    handle to flipimage (see GCBO)
@@ -2288,9 +2387,9 @@ if isfield(handles, 'ImStack')
     handles.ImStack = flip(handles.ImStack, 2);
 end
 
-if isfield(handles, 'ImTrack')
-    handles.ImTrack = flip(handles.ImTrack, 2);
-end
+% if isfield(handles, 'ImTrack')
+%     handles.ImTrack = flip(handles.ImTrack, 2);
+% end
 
 %end
 guidata(hObject, handles);
@@ -2582,28 +2681,50 @@ if isfield(handles,'ImStack')
     ImDepthEdit_Callback(handles.ImDepthEdit, [], handles); % Manually call the callback function because it doesn't do automatically
 end
 
+function Rvalue_Callback(hObject, eventdata, handles)
+% hObject    handle to Rvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Rvalue as text
+%        str2double(get(hObject,'String')) returns contents of Rvalue as a double
+handles.R = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+
+% --- Executes during object creation, after setting all properties.
+function Rvalue_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Rvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.R = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+
 % --- Executes on button press in Process_folder.
 function Process_folder_Callback(hObject, eventdata, handles)
 % hObject    handle to Process_folder (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-redo = 1;
-
-mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing\';
-subfolders = dir(mainfolder);
-
-for j = 7:length(subfolders)-2
-    foldername = subfolders(j+2).name;
-    
-    cd([mainfolder foldername]);
-    
-    file = dir('*sine_020*.mp4');
-
-if redo
-    
-handles.fname = file.name;
-handles.pname = [file.folder,'\'];
+handles.fname = 'short_clip_low.mp4';
+handles.pname = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\';
 cd(handles.pname)
 handles.movObj = VideoReader([handles.pname handles.fname]);
 mb = waitbar(0,'Loading Video....');
@@ -2627,7 +2748,7 @@ if isfield(handles,'ImStackOr')
     handles = rmfield(handles, 'ImStackOr');
 end
 
-handles.ImStack = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
 
 while hasFrame(handles.movObj)
     waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
@@ -2646,57 +2767,17 @@ close(mb)
 
 cd(handles.pname)
 
-handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
-
-% set the string in the frame_number box to the current frame value (1)
-set(handles.frame_number,'String',num2str(1))
-
-% set the limits on the slider - use number of frames to set maximum (min =
-% 1)
-set(handles.filename,'String',[handles.pname handles.fname])
-set(handles.frame_slider,'Min',1);
-set(handles.frame_slider,'Max',handles.NumFrames);
-set(handles.frame_slider,'Value',1);
-set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
-set(handles.frame_rate,'String',handles.FrameRate(1))
-set(handles.vid_width,'String',handles.vidWidth(1))
-set(handles.vid_height,'String',handles.vidHeight(1))
-
 % update the image axes using show_image function (bottom)
+clear_fascicle_Callback(hObject, eventdata, handles);
+
 handles.ImStackOr = handles.ImStack;
 
-% crop
-handles = AutoCrop_Callback(hObject, eventdata, handles);
+guidata(hObject, handles);
+show_image(hObject,handles);
 
-% show
-handles = show_image(hObject,handles);
 
-handles.parms.apo.super.cut = [.01 .3];
-handles.parms.apo.deep.cut = [.3 .7];
+AutoCrop_Callback(hObject, eventdata, handles)
 
-if isfield(handles,'ImTrack')
-    w = size(handles.ImTrack,2);
-else
-    w = handles.vidWidth;
-end
+process_all_Callback(hObject, eventdata, handles)
 
-set(handles.S, 'Position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight])
-set(handles.D, 'Position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight])
-
-% process
-handles = process_all_Callback(hObject, eventdata, handles);
-end
-
-exp = -4:1;
-Qs = 10.^exp;
-
-for i = 1:length(Qs)
-    handles.Q = Qs(i);
-    handles = do_state_estimation(hObject, eventdata, handles);
-
-    % save
-    save_video_Callback(hObject, eventdata, handles)
-    Save_As_Mat_Callback(hObject, eventdata, handles)
-    
-end
-end
+save_video_Callback(hObject, eventdata, handles)
