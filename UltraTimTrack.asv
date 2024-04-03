@@ -1629,8 +1629,8 @@ if isfield(handles,'ImStack')
             
             tstart = tic;
             parfor f = frames             
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                 WaitMessage.Send; %update waitbar parfor
             end
             WaitMessage.Destroy(); %update waitbar parfor
@@ -1643,8 +1643,8 @@ if isfield(handles,'ImStack')
             hwb = waitbar(0,'','Name','Running TimTrack...');
             for f = frames
 
-                geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
+%                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
+                geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
                 waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
 
             end
@@ -2102,14 +2102,13 @@ alphas = geofeatures.alphas;
 alphas(alphas==90 | alphas == 180) = [];
 % 
 if median(alphas) < 90 || isempty(alphas)
-    parms.fas.range = [5 80];
+    parms.fas.range = [1 80];
 else
-    parms.fas.range = [5 80] + 90;
+    parms.fas.range = [1 80] + 90;
 end
 
 % run TimTrack
-% geofeatures = get_fascicle_angle(data, parms);
-geofeatures = auto_ultrasound(data, parms);
+geofeatures = get_fascicle_angle(data, parms);
 handles.parms = parms;
 
 % scale
@@ -2590,20 +2589,20 @@ function Process_folder_Callback(hObject, eventdata, handles)
 
 redo = 1;
 
-mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing\';
-subfolders = dir(mainfolder);
+mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing';
+subfolder = dir(mainfolder);
 
-for j = 7:length(subfolders)-2
+for j = 1:length(subfolders)-2
     foldername = subfolders(j+2).name;
     
-    cd([mainfolder foldername]);
+    cd([mainfolder subfolder]);
     
     file = dir('*sine_020*.mp4');
 
 if redo
     
-handles.fname = file.name;
-handles.pname = [file.folder,'\'];
+handles.fname = file(3);
+handles.pname = [mainfolder subfolder];
 cd(handles.pname)
 handles.movObj = VideoReader([handles.pname handles.fname]);
 mb = waitbar(0,'Loading Video....');
@@ -2671,7 +2670,7 @@ handles = AutoCrop_Callback(hObject, eventdata, handles);
 % show
 handles = show_image(hObject,handles);
 
-handles.parms.apo.super.cut = [.01 .3];
+handles.parms.apo.super.cut = [.01 .2];
 handles.parms.apo.deep.cut = [.3 .7];
 
 if isfield(handles,'ImTrack')
@@ -2698,5 +2697,4 @@ for i = 1:length(Qs)
     save_video_Callback(hObject, eventdata, handles)
     Save_As_Mat_Callback(hObject, eventdata, handles)
     
-end
 end
