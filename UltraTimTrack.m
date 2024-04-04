@@ -1683,8 +1683,7 @@ for i = 1:2
     y(:,i) = filtfilt(b,a,x(:,i));
 end
 
-handles.Qmax = asind(handles.Q/mean(x(:,2)));
-handles.R = std(x-y);
+handles.R = var(x-y);
 
 function[handles] = do_state_estimation(hObject, eventdata, handles)
 % hObject    handle to do_state_estimation (see GCBO)
@@ -1775,26 +1774,23 @@ show_data(hObject, handles);
 guidata(hObject, handles);
 
 
-function[R, Q] = get_RQ_super_apo_point(handles, frame_no, i, j)
-Q = handles.Q;
+function[R, Q] = get_RQ_super_apo_point(handles, dx)
+
+% Optical flow error is proportional to flow
+Q = handles.Q * dx^2;
 R = handles.X;
 
-function[R, Q] = get_RQ_aponeurosis(handles, frame_no, i, j)
-Q = handles.Q;
+function[R, Q] = get_RQ_aponeurosis(handles, dx)
+
+% Optical flow error is proportional to flow
+Q = handles.Q  * dx^2;
 R = handles.R(2);
 
-function[R, Q] = get_RQ_fascicle(handles, frame_no,prev_frame_no)
-i= 1; j= 1;
-% Optical flow is more reliable at small angles, because optical flow is
-% mostly horizontal shear and (errors in) horizontal shear affect the
-% fascicle less if its oriented more horizontally
-dalpha = handles.Region(i).Fascicle(j).dalpha(frame_no);
+function[R, Q] = get_RQ_fascicle(handles, dx)
 
-sigmoid = @(x) 1./(1+exp(-1000*(x-0.01)));
+% Optical flow error is proportional to flow
+Q = handles.Q * dx^2;
 
-Q = handles.Qmax * sind(handles.Region(i).Fascicle(j).alpha{prev_frame_no}) * sigmoid(dalpha);
-
-% TimTrack is more reliable if alpha estimates are similar
 R = handles.R(1);
 
 function [K] = run_kalman_filter(k)
@@ -1806,6 +1802,13 @@ K.P_minus = k.P_prev + k.Q;
 
 % kalman xshiftcor
 K.K = K.P_minus / (K.P_minus + k.R);
+
+if (K.K < 0) || (K.K > 1)
+    disp('warning: kalman gain outside 0-1 interval');
+
+    K.K(K.K<0) = 0;
+    K.K(K.K>1) = 1;
+end
 
 % estimated state
 K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
@@ -1845,7 +1848,8 @@ k.y = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(fr
 k.P_prev = handles.Region(i).ROIp{prev_frame_no};
 
 % get the process noise and measurement noise covariance
-[k.R, k.Q] = get_RQ_aponeurosis(handles, frame_no, i, j);
+% dx = sqrt(APO_prev(:,
+[k.R, k.Q] = get_RQ_aponeurosis(handles, dx);
 
 % run kalman filter
 K = run_kalman_filter(k);
@@ -1884,12 +1888,9 @@ deep_apo    = ROI([2,3],:);
 super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
-% save the change in alpha from optical flow
-handles.Region(i).Fascicle(j).dalpha(frame_no) = dalpha;
-
 %% State estimation superficial aponeurosis attachment
 % get the process noise and measurement noise covariance
-[s.R, s.Q] = get_RQ_super_apo_point(handles, frame_no, i, j);
+[s.R, s.Q] = get_RQ_super_apo_point(handles, dx);
 
 % a priori estimate from optical flow
 s.x_minus = x_minus(1);
@@ -1911,7 +1912,7 @@ fasy2 = super_coef(2) + fasx2*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
-[f.R, f.Q] = get_RQ_fascicle(handles, frame_no, prev_frame_no);
+[f.R, f.Q] = get_RQ_fascicle(handles, dalpha);
 
 % apriori estimate from optical flow
 f.x_minus = x_minus(2);
@@ -2593,17 +2594,18 @@ redo = 1;
 mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing\';
 subfolders = dir(mainfolder);
 
-for j = 7:length(subfolders)-2
+for j = 1:length(subfolders)-2
     foldername = subfolders(j+2).name;
     
     cd([mainfolder foldername]);
     
-    file = dir('*sine_020*.mp4');
+    files = dir('*.mp4');
 
+for k = 1:length(files)
 if redo
-    
-handles.fname = file.name;
-handles.pname = [file.folder,'\'];
+ 
+handles.fname = files(k).name;
+handles.pname = [files(k).folder,'\'];
 cd(handles.pname)
 handles.movObj = VideoReader([handles.pname handles.fname]);
 mb = waitbar(0,'Loading Video....');
@@ -2690,6 +2692,7 @@ end
 exp = -4:1;
 Qs = 10.^exp;
 
+handles.pname = [handles.pname, 'analyzed\'];
 for i = 1:length(Qs)
     handles.Q = Qs(i);
     handles = do_state_estimation(hObject, eventdata, handles);
@@ -2698,5 +2701,6 @@ for i = 1:length(Qs)
     save_video_Callback(hObject, eventdata, handles)
     Save_As_Mat_Callback(hObject, eventdata, handles)
     
+end
 end
 end
