@@ -1482,7 +1482,7 @@ handles = process_all_TimTrack(hObject, eventdata, handles);
 handles = process_all_UltraTrack(hObject, eventdata, handles);
    
 % State estimation
-handles = do_state_estimation(hObject, eventdata, handles);
+% handles = do_state_estimation(hObject, eventdata, handles);
 
 % Update handles structure
 guidata(hObject, handles);
@@ -1498,9 +1498,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     
     im1 = handles.ImStack(:,:,1);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
-    
-    % define the initial variance
-    handles.Region(1).ROIp{1} = 10;
+   
 
     for i = 1:length(handles.Region)
             
@@ -1666,20 +1664,47 @@ end
 
 function[handles] = estimate_variance(hObject, eventdata, handles)
 
-handles.Frequency = 2;
+geofeatures = handles.geofeatures;
+n = handles.vidWidth;
 
+%%
+
+
+x = nan(handles.NumFrames,6);
+for f = 1:handles.NumFrames
+    APO_TT = round([polyval(geofeatures(f).super_coef, 1) polyval(geofeatures(f).deep_coef, [1 n]) polyval(geofeatures(f).super_coef, [n 1])])';
+
+    x(f,1) = geofeatures(f).alpha;
+    for k = 1:length(APO_TT)
+        x(f,1+k) = APO_TT(k);
+    end
+end
+
+%% fft
+L = handles.NumFrames;
+Fs = handles.FrameRate; 
+Y = fft(x(:,1)-mean(x(:,1)));
+
+f = Fs/L*(-L/2:L/2-1);
+P = abs(fftshift(Y));
+
+% figure(10)
+% plot(f,P,"LineWidth",3)
+% title("fft Spectrum in the Positive and Negative Frequencies")
+% xlabel("f (Hz)")
+% ylabel("|fft(X)|")
+
+Fdom = max(f(P==max(P)));
+ 
+
+%%
+% filter
+handles.Frequency = Fdom;
 Wn = 1.5*handles.Frequency / (.5 * handles.FrameRate);
 [b,a] = butter(2, Wn);
 
-x = nan(handles.NumFrames,2);
-for f = 1:handles.NumFrames
-    x(f,1) = handles.geofeatures(f).alpha;
-    x(f,2) = handles.geofeatures(f).thickness;
-%     x(i,2) = handles.geofeatures(i).alpha.median;
-end
- 
 y = nan(size(x));
-for i = 1:2
+for i = 1:size(x,2)
     y(:,i) = filtfilt(b,a,x(:,i));
 end
 
@@ -1773,25 +1798,10 @@ show_image(hObject, handles);
 show_data(hObject, handles);
 guidata(hObject, handles);
 
-
-function[R, Q] = get_RQ_super_apo_point(handles, dx)
-
-% Optical flow error is proportional to flow
-Q = handles.Q * dx^2;
-R = handles.X;
-
-function[R, Q] = get_RQ_aponeurosis(handles, dx)
+function[Q] = getQ(handles, dx)
 
 % Optical flow error is proportional to flow
 Q = handles.Q  * dx^2;
-R = handles.R(2);
-
-function[R, Q] = get_RQ_fascicle(handles, dx)
-
-% Optical flow error is proportional to flow
-Q = handles.Q * dx^2;
-
-R = handles.R(1);
 
 function [K] = run_kalman_filter(k)
 % this assumes we already have the aposteriori state estimate (k.x_minus),
@@ -1828,7 +1838,12 @@ w = handles.Region(i).warp(:,:,prev_frame_no);
 geofeatures = handles.geofeatures;
 n = handles.vidWidth;
 
-%% Aponeurosis
+% define the initial variance
+handles.Region(1).ROIp{1} = zeros(1,5);
+handles.Region(i).Fascicle(j).fas_p{1} = zeros(1,2);
+
+%% Apply warp
+% Aponeurosis
 APO_prev = [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}];
 
 if strcmp(direction,'forward')
@@ -1837,33 +1852,10 @@ else
     APO_new = transformPointsInverse(w, APO_prev);
 end
 
-% We already have the apriori estimate, because we transformed points
-% forward using the warp matrix
-k.x_minus = APO_new(:,2);
-
-% Hough estimate of vertical aponeurosis position
-k.y = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
-
-% previous estimate covariance
-k.P_prev = handles.Region(i).ROIp{prev_frame_no};
-
-% get the process noise and measurement noise covariance
-% dx = sqrt(APO_prev(:,
-[k.R, k.Q] = get_RQ_aponeurosis(handles, dx);
-
-% run kalman filter
-K = run_kalman_filter(k);
-
-% update
-handles.Region(i).ROIy{frame_no} = K.x_plus;
-handles.Region(i).ROIp{frame_no} = K.P_plus;
-
-%% Fascicle
-% Fascicle - Aponeurosis intersection points from optical flow
+% Fascicle
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
 
-% Apply the warp
 if strcmp(direction,'forward')
     fas_new = transformPointsForward(w, fas_prev);
 else
@@ -1877,20 +1869,50 @@ alpha_new = alpha_prev + dalpha;
 % A priori state estimate
 x_minus = [fas_new(2,1) alpha_new];
 
-% previous estimate covariance
-handles.Region(i).Fascicle(j).fas_p{1} = [10 5];
-P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
+%% state estimation aponeuroses
+% TimTrack estimate
+APO_TT = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
 
-% current aponeurosis
-ROI = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+% loop over aponeurosis points
+for ii = 1:length(APO_new)
+
+    k.x_minus = APO_new(ii,2);
+
+    % Hough estimate of vertical aponeurosis position
+    k.y = APO_TT(ii);
+
+    % previous estimate covariance
+    k.P_prev = handles.Region(i).ROIp{prev_frame_no}(ii);
+
+    % get the process noise and measurement noise covariance
+    dx = APO_new(ii,2) - APO_prev(ii,2);
+    k.Q = getQ(handles, dx);
+
+    k.R = handles.R(ii+1);
+    
+    % run kalman filter
+    K = run_kalman_filter(k);
+
+    % update
+    handles.Region(i).ROIy{frame_no}(ii) = K.x_plus;
+    handles.Region(i).ROIp{frame_no}(ii) = K.P_plus;
+end
+
+% fit the current aponeurosis
+ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
 super_apo   = ROI([1,4],:);
 deep_apo    = ROI([2,3],:);
 super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
 %% State estimation superficial aponeurosis attachment
+% previous estimate covariance
+P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
+
 % get the process noise and measurement noise covariance
-[s.R, s.Q] = get_RQ_super_apo_point(handles, dx);
+dx = sqrt((fas_new(2,1)-fas_prev(2,1)).^2 + (fas_new(2,2)-fas_prev(2,2)).^2);
+s.Q = getQ(handles, dx);
+s.R = handles.X;
 
 % a priori estimate from optical flow
 s.x_minus = x_minus(1);
@@ -1912,7 +1934,8 @@ fasy2 = super_coef(2) + fasx2*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
-[f.R, f.Q] = get_RQ_fascicle(handles, dalpha);
+f.Q = getQ(handles, dalpha);
+f.R = handles.R(1);
 
 % apriori estimate from optical flow
 f.x_minus = x_minus(2);
