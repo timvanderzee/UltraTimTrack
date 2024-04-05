@@ -1955,9 +1955,9 @@ fasy2 = super_coef(2) + fasx2*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
-dx = abs(dalpha);
-dx(dx<0.005) = 0;
-f.Q = getQ(handles, dx);
+dx = dalpha - 0.005;
+dx(dx
+f.Q = getQ(handles, dalpha);
 f.R = handles.R(1);
 
 % apriori estimate from optical flow
