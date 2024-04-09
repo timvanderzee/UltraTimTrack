@@ -65,6 +65,9 @@ fullpath = which(filename);
 mainfoldername = erase(fullpath,filename);
 addpath(genpath(mainfoldername));
 
+load('TimTrack_parms.mat','parms')
+handles.parms = parms;
+
 % check to make sure there is a settings mat-file present, if not then make
 % one in the directory where the m-file sits.
 [program_directory, ~, ~] = fileparts(mfilename('fullpath'));
@@ -975,16 +978,16 @@ function save_video_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 if isfield(handles,'ImStack')
-    spos = [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)];
-    dpos = [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)];
+%     spos = [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)];
+%     dpos = [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)];
+% 
+%     handles.ImTrack(spos(2):(spos(2)+spos(4)),spos(1):spos(3),3,:) = 230;
+%     handles.ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):dpos(3),2,:) = 230;
 
-    handles.ImTrack(spos(2):(spos(2)+spos(4)),spos(1):spos(3),3,:) = 230;
-    handles.ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):dpos(3),2,:) = 230;
-
-    [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
-    filename = [pathout fileout];
+%     [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
+%     filename = [pathout fileout];
 %     
-%     filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
+    filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
     vidObj = VideoWriter(filename,'MPEG-4');
     vidObj.FrameRate = handles.FrameRate;
     open(vidObj);
@@ -1021,11 +1024,11 @@ if isfield(handles,'ImStack')
             ImTrack = currentImage;
             
             % show region
-            spos = [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)];
-            dpos = [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)];
+            spos = floor([handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)]);
+            dpos = floor([handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)]);
 
-            ImTrack(spos(2):(spos(2)+spos(4)),spos(1):end,3) = 230;
-            ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):end,2) = 230;
+            ImTrack(spos(2):(spos(2)+spos(4)),spos(1):(spos(1)+spos(3)),3) = 230;
+            ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):(dpos(1)+dpos(3)),2) = 230;
 
             F = ImTrack;
             writeVideo(vidObj,F)
@@ -1162,9 +1165,18 @@ if isfield(handles,'Region')
             TrackingData.Parallel = handles.do_parfor.Value;
             TrackingData.info = "Processing [TimTrack; Opticflow], %%\nBlockSize [width; height], %%\nGains [Apo, Position, Angle]";
 
-            Fdat.R = handles.R;
-            Fdat.Frequency = handles.Frequency;
-            Fdat.geofeatures = handles.geofeatures;
+            if isfield(handles,'R')
+                Fdat.R = handles.R;
+            end
+            
+            if isfield(handles,'Frequency')
+                Fdat.Frequency = handles.Frequency;
+            end
+            
+            if isfield(handles, 'geofeatures')
+                Fdat.geofeatures = handles.geofeatures;
+            end
+            
             Fdat.Region(i) = handles.Region(i);
             Fdat.Region(i).FL = handles.Region(i).fas_length(nz,:)';
             Fdat.Region(i).PEN = handles.Region(i).fas_pen(nz,:)';
@@ -1476,14 +1488,8 @@ if isfield(handles,'ImStack')
             ImTrack = currentImage;
             
             % show region
-%             spos = [handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)];
-%             dpos = [handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)];
-% 
-%             ImTrack(spos(2):(spos(2)+spos(4)),spos(1):spos(3),3,:) = 230;
-%             ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):dpos(3),2,:) = 230;
-            
-            handles.S.Position = [handles.vidWidth*1.5 1 handles.vidWidth .3*handles.vidHeight];
-            handles.D.Position = [handles.vidWidth*1.5 .5*handles.vidHeight handles.vidWidth .4*handles.vidHeight];
+            set(handles.S, 'Position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.super.cut)*handles.vidHeight])
+            set(handles.D, 'Position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.deep.cut)*handles.vidHeight])
         end
     end
             
@@ -1511,8 +1517,8 @@ if isfield(handles,'ImStack')
     
     % if we're showing original, show the aponeurosis regions
     if ~isfield(handles,'ImTrack') && (~isfield(handles, 'S') || ~isvalid(handles.S))
-        handles.S = images.roi.Rectangle(gca,'position', [1 1 handles.vidWidth .3*handles.vidHeight],'color','blue');
-        handles.D = images.roi.Rectangle(gca,'position', [1 .5*handles.vidHeight handles.vidWidth .4*handles.vidHeight],'color','green');
+        handles.S = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
+        handles.D = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
     end
     
     % Update Im and NIm
@@ -1552,6 +1558,9 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % hObject    handle to process_all (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+% detect first frame
+handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % Run TimTrack
 if ~isnan(handles.Q)
@@ -1682,9 +1691,6 @@ handles.ProcessingTime(2) = toc(tstart);
 
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
-% detect first frame
-handles = Auto_Detect_Callback(hObject, eventdata, handles);
-
 % run TimTrack on all frames
 frames = 1:handles.NumFrames;
 numIterations = length(frames);
@@ -1729,7 +1735,6 @@ if isfield(handles,'ImStack')
             
             tstart = tic;
             parfor f = frames             
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                 WaitMessage.Send; %update waitbar parfor
             end
@@ -1744,7 +1749,6 @@ if isfield(handles,'ImStack')
             for f = frames
 
                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
-%                 geofeatures(f) = get_fascicle_angle(im2(:,:,f), parms);
                 waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
 
             end
@@ -1824,7 +1828,9 @@ function[handles] = do_state_estimation(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % get Qmax
-handles = estimate_variance(hObject, eventdata, handles);
+if ~isnan(handles.Q)
+    handles = estimate_variance(hObject, eventdata, handles);
+
 
 % start with the original
 % for f = 1:get(handles.frame_slider,'Max')
@@ -1858,7 +1864,7 @@ end
 
 show_data(hObject, handles);
 guidata(hObject, handles);
-
+end
 
 function[Q] = getQ(handles, dx)
 
@@ -1960,7 +1966,7 @@ for ii = 1:length(APO_new)
     handles.Region(i).ROIp{frame_no}(ii) = K.P_plus;
     
     % if we assume infinite variance in optical flow, take TimTrack
-    if ~isfinite(handles.Q)
+    if isinf(handles.Q)
         handles.Region(i).ROIy{frame_no}(ii) = k.y;
         handles.Region(i).ROIp{frame_no}(ii) = k.R;
     end
@@ -1998,7 +2004,7 @@ S = run_kalman_filter(s);
 fasx2 = S.x_plus;
 supP = S.P_plus;
 
-if ~isfinite(handles.Q)
+if isinf(handles.Q)
     fasx2 = s.y;
     supP = s.R;
 end
@@ -2030,7 +2036,7 @@ alpha = F.x_plus;
 Kgain = F.K;
 fasP = F.P_plus;
 
-if ~isfinite(handles.Q)
+if isinf(handles.Q)
     alpha = f.y;
     Kgain = 1;
     fasP = f.R;
@@ -2066,94 +2072,11 @@ handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{fram
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
 
-
-function[TimTrack] = get_fascicle_angle(data, parms)
-
-% run TimTrack
-geofeatures = auto_ultrasound(data, parms);
-
-% TimTrack.alpha.mu = geofeatures.alpha;
-% TimTrack.alpha.sigma = std(geofeatures.alphas);
-
-% a = parms.fas.range(2):-parms.fas.thetares:parms.fas.range(1);
-% w = geofeatures.hs;
-
-% help the optimization by adding some values
-% A = a;
-% W = w;
-% 
-% sine_fun = @(c, k) -diff(k)/2 * cos(c) + mean(k);
-% norm_fun = @(c, x, k) c(1)*exp(-(x-sine_fun(c(2), k)).^2/(2*c(3)^2)) + c(4);
-% cost_fun = @(c, x, k, y) sum((y - norm_fun(c,x,k)).^2);
-% 
-% % bound on fascicle angle
-% k = [5 80];
-% 
-% alpha0 = max(k(1), geofeatures.alpha);
-% 
-% C0 = [max(w)-min(w) acos((alpha0-mean(k))/(-diff(k)/2)) std(geofeatures.alphas) min(w)];
-% C = fminsearch(@(p) cost_fun(p, A, k, W), C0);
-% 
-% % update estimate
-% TimTrack.alpha.A = C(1);
-% TimTrack.alpha.mu = sine_fun(C(2),k);
-% TimTrack.alpha.sigma = abs(C(3));
-% TimTrack.alpha.b = C(4);
-% TimTrack.alpha.y = w;
-% TimTrack.alpha.x = a;
-
-% norm_fun = @(c, mu, x) c(1)*exp(-(x-mu).^2/(2*c(2)^2)) + c(3);
-% cost_fun = @(c, x, mu, y) sum((y - norm_fun(c,mu, x)).^2);
-% 
-% C0 = [max(w)-min(w) std(geofeatures.alphas) min(w)];
-% 
-% mu = geofeatures.alpha;
-% C = fminsearch(@(p) cost_fun(p, A, mu, W), C0);
-% 
-% % update estimate
-% TimTrack.alpha.A = C(1);
-% TimTrack.alpha.mu = geofeatures.alpha;
-% TimTrack.alpha.sigma = C(2);
-% TimTrack.alpha.b = C(3);
-% TimTrack.alpha.y = w;
-% TimTrack.alpha.x = a;
-
-%%
-% figure(10)
-% bar(A, W)
-% 
-% hold on
-% % C = [150 30 10];
-% plot(A, norm_fun(C, mu, A), 'b-', 'LineWidth', 2)
-
-%% recalc fas_coef
-% m = size(data,2);
-%     
-% Mx = round(m/2);
-% My = mean([polyval(geofeatures.deep_coef, Mx) polyval(geofeatures.super_coef, Mx)]);
-% 
-% geofeatures.fas_coef(1) = -tand(TimTrack.alpha.mu);
-% geofeatures.fas_coef(2) =  My - Mx * geofeatures.fas_coef(1);
-% 
-% cost = @(x, super_coef, deep_coef, fas_coef, Mx) max([(Mx - (x-deep_coef(2)) / (deep_coef(1)-fas_coef(1))).^2  (Mx - (x-super_coef(2)) / (super_coef(1)-fas_coef(1))).^2]);
-% 
-% geofeatures.fas_coef(2) = fminsearch(@(x) cost(x, geofeatures.super_coef, geofeatures.deep_coef, geofeatures.fas_coef, Mx), My - Mx * geofeatures.fas_coef(1));
-
-%% update
-% scale back
-TimTrack.super_coef     = geofeatures.super_coef;
-TimTrack.deep_coef      = geofeatures.deep_coef;
-TimTrack.fas_coef       = geofeatures.fas_coef;
-TimTrack.thickness      = geofeatures.thickness;
-TimTrack.alpha          = geofeatures.alpha;
-
 % --- Executes on button press in Auto_Detect.
 function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % hObject    handle to Auto_Detect (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-load('parms.mat','parms')
 
 % find current frame number from slider
 frame_no = round(get(handles.frame_slider,'Value'));
@@ -2171,30 +2094,8 @@ end
 %% Aponeurosis detection
 axes(handles.axes1); 
 
-% for jj = 1:2
-%     [~,apCentre] = ginputYellow(1);
-% 
-%     apCentre = round(apCentre/handles.vidHeight,2)*100;
-%     apRound(jj) = round(apCentre,-1);
-% end
-
-% don't use TimTrack's figure display, because we already have this GUI
-parms.show = 0;
-parms.fas.show = 0;
-
-% need to be more lenient for broad range of muscles
-parms.apo.deep.maxangle = 10;
-parms.fas.thetares = 0.5;
-
-% some default parameters
-% range = 15;
-% 
-% % make range dependent on user-picked locations
-% parms.apo.super.cut = [max(apRound(1)-range, 0), apRound(1)+range] / 100;
-% parms.apo.deep.cut = [apRound(2)-range, min(apRound(2)+range, 100)] / 100;
-
-parms.apo.super.cut = [handles.S.Position(2) handles.S.Position(2)+handles.S.Position(4)] / handles.vidHeight;
-parms.apo.deep.cut = [handles.D.Position(2) handles.D.Position(2)+handles.D.Position(4)] / handles.vidHeight;
+handles.parms.apo.super.cut = [handles.S.Position(2) handles.S.Position(2)+handles.S.Position(4)] / handles.vidHeight;
+handles.parms.apo.deep.cut = [handles.D.Position(2) handles.D.Position(2)+handles.D.Position(4)] / handles.vidHeight;
 
 set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
@@ -2215,9 +2116,7 @@ data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 % end
 
 % run TimTrack
-% geofeatures = get_fascicle_angle(data, parms);
-geofeatures = auto_ultrasound(data, parms);
-handles.parms = parms;
+geofeatures = auto_ultrasound(data, handles.parms);
 
 % scale
 geofeatures.thickness = geofeatures.thickness * handles.imresize_fac;
@@ -2649,23 +2548,21 @@ function Process_folder_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-redo = 1;
-
 mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing\';
 % subfolders = dir(mainfolder);
 
-subfolders = {'3011', '0812', '1312'};
+subfolders = {'1701','1901a'};
 
 for j = 1:length(subfolders)
     foldername = subfolders{j};
     
     cd([mainfolder foldername]);
     
-    files = dir('*high*.mp4');
+    files = dir('*.mp4');
+    
 
-for k = 1:length(files)
-if redo
- 
+for k = 4:6
+
 handles.fname = files(k).name;
 handles.pname = [files(k).folder,'\'];
 cd(handles.pname)
@@ -2735,23 +2632,20 @@ handles = AutoCrop_Callback(hObject, eventdata, handles);
 % show
 handles = show_image(hObject,handles);
 
-handles.parms.apo.super.cut = [.01 .3];
-handles.parms.apo.deep.cut = [.3 .7];
+handles.pname = [handles.pname, 'analyzed\'];
 
-w = handles.vidWidth;
-
-set(handles.S, 'Position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight])
-set(handles.D, 'Position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight])
-
+for kk = 1:2
+    if kk == 1
+        Qs = nan;
+        handles.Q = Qs;
+    else
+        Qs = [0, 10.^(-4:0), 1000, inf];
+        handles.Q = 1;
+    end
+    
 % process
 handles = process_all_Callback(hObject, eventdata, handles);
-end
 
-exp = -4:0;
-Qs = [0, 10.^exp, 1000, inf];
-% Qs = inf;
-
-handles.pname = [handles.pname, 'analyzed\'];
 for i = 1:length(Qs)
     handles.Q = Qs(i);
    
@@ -2761,6 +2655,7 @@ for i = 1:length(Qs)
     save_video_Callback(hObject, eventdata, handles)
     Save_As_Mat_Callback(hObject, eventdata, handles)
     
+end
 end
 end
 end
