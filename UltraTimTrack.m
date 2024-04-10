@@ -21,9 +21,6 @@ function varargout = UltraTimTrack(varargin)
 
 % Edit the above text to modify the response to help UltraTimTrack
 
-% Last Modified by GUIDE v2.5 02-Apr-2024 18:06:02
-% Last Modified by GUIDE v2.5 02-Apr-2024 14:48:51
-% Last Modified by Paolo Tecchio 17/08/2022
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
@@ -303,16 +300,17 @@ end
 % setting of the video (ImageDepth)
 [path,name,~] = fileparts([handles.pname handles.fname]); %more elegant, people may not have necessarly mp4
 if exist([path '/' name '.mat'],"file")
-    load([path '/' name '.mat']);
-    if isfield(TVDdata,'cmPerPixY') %check whether the field exists and update scalar
-        ImageDepth = round(TVDdata.cmPerPixY*10,3); %round to 3 digits
+    TVD = load([path '/' name '.mat']);
+    if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
+        %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
+        ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
         handles.ID = ImageDepth;
         set(handles.ImDepthEdit,'String',num2str(ImageDepth));
 
         % Update handles structure
         guidata(hObject, handles);
     end
-    clearvars TVDdata path name
+    clearvars path name
 end
 
 % display the path and name of the file in the filename text box
@@ -354,8 +352,8 @@ cd(handles.pname)
 % make a timeline which corresponds to the ultrasound frame data
 if strcmp(Ext,'.mat')
     handles.Time = handles.TimeStamps;
-elseif exist("TVDdata",'var') %if the mat file associated with mp4 exists, load that because echowave has unconstant framerate
-    handles.Time = TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them?
+elseif isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
+    handles.Time = TVD.TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them
 else
     handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
 end
@@ -1596,21 +1594,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
         points = points(inPoints,:);
 
-        %% Define a smaller area with features pts around the fascicle line
-        %get points around fascicle line
-        %ptsFas = [ handles.Region.Fascicle.fas_x{1,1}, handles.Region.Fascicle.fas_y{1,1}] ;
-
-        % Calculate the distance between each point of interest and the line defined by ptsFas
-        %distances = pointToLineDistance(points, ptsFas);
-
-        % Set the maximum distance within which a point is considered around the line
-        %maxDistance = round(2 / handles.ID); % 2mm, adjust according to 10% of pixels to mm
-
-        % Keep only the points that are within the maximum distance from the line
-        % selectedPoints = points(distances <= maxDistance, :);
-        %
-        % points = selectedPoints;
-
         %% Initialize point tracker and run opticflow
         tstart = tic;
         %calculate block size according to ROI 
@@ -1861,7 +1844,7 @@ end
 %         end
 %     end
 % end
-
+show_image(hObject,handles);
 show_data(hObject, handles);
 guidata(hObject, handles);
 end
@@ -2120,9 +2103,9 @@ geofeatures = auto_ultrasound(data, handles.parms);
 
 % scale
 geofeatures.thickness = geofeatures.thickness * handles.imresize_fac;
-geofeatures.super_coef = geofeatures.super_coef     .* [1 handles.imresize_fac];
-geofeatures.deep_coef = geofeatures.deep_coef       .* [1 handles.imresize_fac];
-geofeatures.fas_coef = geofeatures.fas_coef         .* [1 handles.imresize_fac];
+geofeatures.super_coef(2) = geofeatures.super_coef(2)     .* [handles.imresize_fac];
+geofeatures.deep_coef(2) = geofeatures.deep_coef(2)       .* [handles.imresize_fac];
+geofeatures.fas_coef(2) = geofeatures.fas_coef(2)         .* [handles.imresize_fac];
 
 n = handles.vidWidth;
 i = 1; j = 1;
@@ -2215,7 +2198,6 @@ function do_parfor_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of do_parfor
 handles.do_parfor = get(hObject,'Value');
 
-
 % --- Executes on button press in flipimage.
 function flipimage_Callback(hObject, eventdata, handles)
 % hObject    handle to flipimage (see GCBO)
@@ -2256,17 +2238,6 @@ end
 guidata(hObject, handles);
 show_image(hObject,handles);
 
-
-% --- Function to calculate euclidean distance form the fascicle line and
-% the featuers points to keep around that fascicle (NOT USED NOW)
-function distances = pointToLineDistance(points, line)
-    % Calculate distance between each point and the line
-    x1 = line(1, 1);
-    y1 = line(1, 3);
-    x2 = line(1, 2);
-    y2 = line(1, 4);
-
-    distances = abs((y2 - y1) * points(:, 1) - (x2 - x1) * points(:, 2) + x2 * y1 - y2 * x1) / sqrt((y2 - y1)^2 + (x2 - x1)^2);
 
 % --- Function to check whether ParallelToolbox exists and run it
 function chkParallelToolBox()
@@ -2309,10 +2280,8 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 
 % Check if Parallel Computing Toolbox is running and shut it down
 delete(gcp('nocreate'));
-% disp('Parallel pool shutted down!');
 % Hint: delete(hObject) closes the figure
 delete(hObject);
-
 
 
 function resize_fac_Callback(hObject, eventdata, handles)
@@ -2327,7 +2296,6 @@ handles.imresize_fac = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
-
 
 % --- Executes during object creation, after setting all properties.
 function resize_fac_CreateFcn(hObject, eventdata, handles)
@@ -2345,7 +2313,6 @@ handles.imresize_fac = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
-
 
 function Qvalue_Callback(hObject, eventdata, handles)
 % hObject    handle to Qvalue (see GCBO)
@@ -2365,7 +2332,6 @@ if isfield(handles, 'Region')
     do_state_estimation(hObject, eventdata, handles)
 end
 
-
 % --- Executes during object creation, after setting all properties.
 function Qvalue_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to Qvalue (see GCBO)
@@ -2382,7 +2348,6 @@ handles.Q = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
-
 
 function Xvalue_Callback(hObject, eventdata, handles)
 % hObject    handle to Xvalue (see GCBO)
@@ -2419,7 +2384,7 @@ handles.X = str2double(get(hObject,'String'));
 % Update handles structure
 guidata(hObject, handles);
 
-
+% --- Function for detecting borders of the images and returning the rect matrix to crop.
 function ImCropped = autocrop_Tim(Im)
 
 dIm = sum(abs(diff(Im,1, 3)),3);
@@ -2447,64 +2412,6 @@ B = round([min(boundingBoxes(:, 1)), min(boundingBoxes(:, 2)), ...
     max(boundingBoxes(:, 2) + boundingBoxes(:, 4)) - min(boundingBoxes(:, 2))]);
 
 ImCropped = Im(B(2):(B(2)+B(4)-1), B(1):(B(1)+B(3)-1),:);
-
-
-% --- Function for detecting borders of the images and returning the rect matrix to crop.
-function boundToCrop = autocrop(frames,FrameRate)
-% hObject    handle to crop (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-try
-    % Determine the size of the frames matrix.
-    [vidHeight, vidWidth, numberOfFrames] = size(frames);
-
-    % Initialize a binary matrix.
-    binT = false(vidHeight, vidWidth);
-
-    % Initialize the adaptive background.
-    alpha = 0.5;
-    Background = frames(:, :, 1);
-    %go
-    for frame = 2 : round(FrameRate/4) :  numberOfFrames
-        % Change background slightly at each frame.
-        Background = (1 - alpha) * frames(:, :, frame) + alpha * Background;
-
-        % Calculate the difference between this frame and the background.
-        differenceImage = frames(:, :, frame) - uint8(Background);
-
-        % Threshold with Otsu method.
-        %grayImage = rgb2gray(differenceImage);
-        grayImage = (differenceImage);
-        thresholdLevel = graythresh(grayImage);
-        binaryImage = im2bw(grayImage, thresholdLevel);
-
-        % Add binary image to the sum.
-        binT = binT + binaryImage;
-    end
-
-catch ME
-    % Handle errors.
-    strErrorMessage = sprintf('Error!!!');
-    disp(strErrorMessage);
-    return;
-end
-
-% Apply a median filter, [10 10] neighbor pixels to the binary matrix.
-filteredMatrix = medfilt2(binT, [10, 10], 'zeros');
-%maybe check the filled area to be sure that  i don't small bastards
-%around
-
-% Find connected components in the filtered matrix.
-stats = regionprops(filteredMatrix, 'BoundingBox');
-
-% Extract the bounding box information.
-boundingBoxes = cat(1, stats.BoundingBox);
-
-% Calculate the overall bounding box that encompasses all smaller bounding boxes.
-boundToCrop = [min(boundingBoxes(:, 1)), min(boundingBoxes(:, 2)), ...
-    max(boundingBoxes(:, 1) + boundingBoxes(:, 3)) - min(boundingBoxes(:, 1)), ...
-    max(boundingBoxes(:, 2) + boundingBoxes(:, 4)) - min(boundingBoxes(:, 2))];
-
 
 
 % --------------------------------------------------------------------
@@ -2548,114 +2455,161 @@ function Process_folder_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing\';
-% subfolders = dir(mainfolder);
-
-subfolders = {'1701','1901a'};
-
-for j = 1:length(subfolders)
-    foldername = subfolders{j};
-    
-    cd([mainfolder foldername]);
-    
-    files = dir('*.mp4');
-    
-
-for k = 4:6
-
-handles.fname = files(k).name;
-handles.pname = [files(k).folder,'\'];
-cd(handles.pname)
-handles.movObj = VideoReader([handles.pname handles.fname]);
-mb = waitbar(0,'Loading Video....');
-
-% get info
-handles.vidHeight = handles.movObj.Height;
-handles.vidWidth = handles.movObj.Width;
-handles.NumFrames = handles.movObj.NumFrames;
-handles.FrameRate = handles.movObj.FrameRate;
-
-i=1;
-
-% start clean
-if isfield(handles,'ImTrack')
-    handles = rmfield(handles, 'ImTrack');
+dir_data = uigetdir(cd,'Select folder with video(s)');
+if dir_data == 0 %no folder selected, just return
+    return
 end
-if isfield(handles,'ImStack')
-    handles = rmfield(handles, 'ImStack');
-end
-if isfield(handles,'ImStackOr')
-    handles = rmfield(handles, 'ImStackOr');
+files= dir(dir_data);
+
+%get video format list
+file_formats = VideoReader.getFileFormats;
+video_formats = cell(numel(file_formats),1);
+
+for i = 1 : numel(file_formats)
+    video_formats{i} = ['.' file_formats(i).get.Extension];
 end
 
-handles.ImStack = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
+ind_toRemove = [];
+for n_file = 1 : numel(files)
+    [~,~,ext] = fileparts(files(n_file).name);
+    %save indexes of thefile that are not videos
+    if sum(strcmp(video_formats,ext)) == 0
+        ind_toRemove = [ind_toRemove n_file];
+    end
+end
 
-while hasFrame(handles.movObj)
-    waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
-    if regexp(handles.movObj.VideoFormat,'RGB')
-        handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
-    else
-        handles.ImStack(:,:,i) = readFrame(handles.movObj);
+files(ind_toRemove) = []; %keep videos
+clearvars -except files eventdata hObject handles
+
+% for j = 1:length(subfolders)
+%     foldername = subfolders{j};
+%
+%     cd([mainfolder foldername]);
+%
+%     files = dir('*.mp4');
+%
+
+for k = 1:numel(files) %foreach file
+
+    handles.fname = files(k).name;
+    handles.pname = [files(k).folder,'/'];
+    cd(handles.pname)
+    handles.movObj = VideoReader([handles.pname handles.fname]);
+    mb = waitbar(0,'Loading Video....');
+
+    % get info
+    handles.vidHeight = handles.movObj.Height;
+    handles.vidWidth = handles.movObj.Width;
+    handles.NumFrames = handles.movObj.NumFrames;
+    handles.FrameRate = handles.movObj.FrameRate;
+
+    i=1;
+
+    % start clean
+    %if isfield(handles,'ImTrack')
+    %    handles = rmfield(handles, 'ImTrack');
+    %end
+    if isfield(handles,'ImStack')
+        handles = rmfield(handles, 'ImStack');
+    end
+    if isfield(handles,'ImStackOr')
+        handles = rmfield(handles, 'ImStackOr');
     end
 
-     handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
-    i=i+1;
-end
+    handles.ImStack = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
 
-waitbar(1,mb)
-close(mb)
-
-cd(handles.pname)
-
-handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
-
-% set the string in the frame_number box to the current frame value (1)
-set(handles.frame_number,'String',num2str(1))
-
-% set the limits on the slider - use number of frames to set maximum (min =
-% 1)
-set(handles.filename,'String',[handles.pname handles.fname])
-set(handles.frame_slider,'Min',1);
-set(handles.frame_slider,'Max',handles.NumFrames);
-set(handles.frame_slider,'Value',1);
-set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
-set(handles.frame_rate,'String',handles.FrameRate(1))
-set(handles.vid_width,'String',handles.vidWidth(1))
-set(handles.vid_height,'String',handles.vidHeight(1))
-
-% update the image axes using show_image function (bottom)
-handles.ImStackOr = handles.ImStack;
-
-% crop
-handles = AutoCrop_Callback(hObject, eventdata, handles);
-
-% show
-handles = show_image(hObject,handles);
-
-handles.pname = [handles.pname, 'analyzed\'];
-
-for kk = 1:2
-    if kk == 1
-        Qs = nan;
-        handles.Q = Qs;
-    else
-        Qs = [0, 10.^(-4:0), 1000, inf];
-        handles.Q = 1;
+    while hasFrame(handles.movObj)
+        waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
+        if regexp(handles.movObj.VideoFormat,'RGB')
+            handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
+        else
+            handles.ImStack(:,:,i) = readFrame(handles.movObj);
+        end
+        handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
+        i=i+1;
     end
-    
-% process
-handles = process_all_Callback(hObject, eventdata, handles);
 
-for i = 1:length(Qs)
-    handles.Q = Qs(i);
-   
-    handles = do_state_estimation(hObject, eventdata, handles);
+    waitbar(1,mb)
+    close(mb)
 
-    % save
-    save_video_Callback(hObject, eventdata, handles)
-    Save_As_Mat_Callback(hObject, eventdata, handles)
+    cd(handles.pname)
+    % check whether a mat file exists in the location with the same name with
+    % setting of the video (ImageDepth)
+    [path,name,~] = fileparts([handles.pname handles.fname]); %more elegant, people may not have necessarly mp4
+    if exist([path '/' name '.mat'],"file")
+        TVD = load([path '/' name '.mat']);
+        if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
+            %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
+            ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
+            handles.ID = ImageDepth;
+            set(handles.ImDepthEdit,'String',num2str(ImageDepth));
+
+            % Update handles structure
+            guidata(hObject, handles);
+        end
+        if isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
+            handles.Time = TVD.TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them
+        end
+    else
+        handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
+    end
+
+
+    % set the string in the frame_number box to the current frame value (1)
+    set(handles.frame_number,'String',num2str(1))
+
+    % set the limits on the slider - use number of frames to set maximum (min =
+    % 1)
+    set(handles.filename,'String',[handles.pname handles.fname])
+    set(handles.frame_slider,'Min',1);
+    set(handles.frame_slider,'Max',handles.NumFrames);
+    set(handles.frame_slider,'Value',1);
+    set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
+    set(handles.frame_rate,'String',handles.FrameRate(1))
+    set(handles.vid_width,'String',handles.vidWidth(1))
+    set(handles.vid_height,'String',handles.vidHeight(1))
+
+    % update the image axes using show_image function (bottom)
+    handles.ImStackOr = handles.ImStack;
+
+    % crop
+    handles = AutoCrop_Callback(hObject, eventdata, handles);
+
+    %
+    if handles.flipimage % get(hObject,'Value');
+        handles.ImStack = flip(handles.ImStack, 2);
+    end
+    % show
+    handles = show_image(hObject,handles);
     
+    %create a subfolder where to save results
+    if ~exist([handles.pname 'Analyzed/'], 'dir')
+        mkdir([handles.pname 'Analyzed/'])
+    end
+    handles.pname = [handles.pname 'Analyzed/'];
+
+    for kk = 1:2 %
+        if kk == 1
+            Qs = nan;
+            handles.Q = Qs;
+        else
+            Qs = [0, 10.^(-4:0), 1000, inf];
+            handles.Q = 1;
+        end
+
+        % process
+        handles = process_all_Callback(hObject, eventdata, handles);
+
+        for i = 1:length(Qs)
+            handles.Q = Qs(i);
+
+            handles = do_state_estimation(hObject, eventdata, handles);
+
+            % save
+            save_video_Callback(hObject, eventdata, handles)
+            Save_As_Mat_Callback(hObject, eventdata, handles)
+
+        end
+    end
 end
-end
-end
-end
+
