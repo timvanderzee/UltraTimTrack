@@ -72,12 +72,13 @@ handles.parms = parms;
 if ismac || isunix
     if isempty(dir([program_directory '/ultrasound_tracking_settings.mat']))
         ImageDepth = 65;
-        Sigma = 3;
-        S_Step = 3;
+        % Needed for KL algorithm, but not KLT algorithm
+        %Sigma = 3;
+        %S_Step = 3;
         Position = get(gcf,'Position');
         Default_Directory = cd;
-        save([program_directory '/ultrasound_tracking_settings.mat'], 'ImageDepth', 'Sigma',...
-            'S_Step', 'Position', 'Default_Directory');
+        save([program_directory '/ultrasound_tracking_settings.mat'], 'ImageDepth',...
+            'Position', 'Default_Directory');
     else
         load ultrasound_tracking_settings.mat
     end
@@ -86,12 +87,13 @@ end
 if ispc
     if isempty(dir([program_directory '\ultrasound_tracking_settings.mat']))
         ImageDepth = 65;
-        Sigma = 3;
-        S_Step = 3;
+        % Needed for KL algorithm, but not KLT algorithm
+        %Sigma = 3;
+        %S_Step = 3;
         Position = get(gcf,'Position');
         Default_Directory = cd;
-        save([program_directory '\ultrasound_tracking_settings.mat'], 'ImageDepth', 'Sigma',...
-            'S_Step', 'Position', 'Default_Directory');
+        save([program_directory '\ultrasound_tracking_settings.mat'], 'ImageDepth',...
+            'Position', 'Default_Directory');
     else
         load ultrasound_tracking_settings.mat
     end
@@ -101,8 +103,9 @@ end
 % load the settings mat-file and set default settings
 handles.ID = ImageDepth;
 set(handles.ImDepthEdit,'String',num2str(ImageDepth));
-handles.SIGMA = Sigma;
-handles.S_STEP = S_Step;
+% Needed for KL algorithm, but not KLT algorithm
+%handles.SIGMA = Sigma;
+%handles.S_STEP = S_Step;
 set(0,'RecursionLimit',3000)
 set(gcf,'DoubleBuffer','on','Position',Position);
 %cd(Default_Directory)
@@ -319,6 +322,9 @@ set(handles.filename,'String',[handles.pname handles.fname])
 % set the string in the frame_number box to the current frame value (1)
 set(handles.frame_number,'String',num2str(1))
 
+% allows Cut_frames_before_Callback to work 
+handles.start_frame = 1;
+
 % set the limits on the slider - use number of frames to set maximum (min =
 % 1)
 set(handles.frame_slider,'Min',1);
@@ -352,7 +358,7 @@ cd(handles.pname)
 % make a timeline which corresponds to the ultrasound frame data
 if strcmp(Ext,'.mat')
     handles.Time = handles.TimeStamps;
-elseif isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
+elseif exist('TVD','var') && isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
     handles.Time = TVD.TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them
 else
     handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
@@ -365,6 +371,7 @@ if exist('TrackingData','var')
     if strcmp(chkload,'Yes')
 
         handles.Region = TrackingData.Region;
+        handles.start_frame = TrackingData.start_frame;
         handles.NumFrames = TrackingData.NumFrames;
         set(handles.frame_slider,'Min',1);
         set(handles.frame_slider,'Max',handles.NumFrames);
@@ -408,6 +415,11 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
 
     frame_no = round(get(handles.frame_slider,'Value'));
 
+    handles.start_frame = frame_no + handles.start_frame;
+
+    handles.NumFrames = handles.NumFrames-handles.start_frame+1;
+
+    handles.Time = handles.Time(handles.start_frame:handles.start_frame + handles.NumFrames-1);
 
     set(handles.frame_slider,'Min',1);
     set(handles.frame_slider,'Max',handles.NumFrames);
@@ -596,46 +608,25 @@ function save_settings_Callback(hObject, eventdata, handles)
 
 
 ImageDepth = handles.ID;
-Sigma = handles.SIGMA;
-S_Step = handles.S_STEP;
+% Needed for KL algorithm, but not KLT algorithm
+%Sigma = handles.SIGMA;
+%S_Step = handles.S_STEP;
 Position = get(gcf,'Position');
 Default_Directory = cd;
 
 [directory, ~, ~] = fileparts(mfilename('fullpath'));
 
 if ismac || isunix
-    save([directory '/ultrasound_tracking_settings.mat'], 'ImageDepth', 'Sigma',...
-        'S_Step', 'Position', 'Default_Directory');
+    save([directory '/ultrasound_tracking_settings.mat'], 'ImageDepth', ...
+         'Position', 'Default_Directory');
 end
 
 if ispc
-    save([directory '\ultrasound_tracking_settings.mat'], 'ImageDepth', 'Sigma',...
-        'S_Step', 'Position', 'Default_Directory');
+    save([directory '\ultrasound_tracking_settings.mat'], 'ImageDepth',...
+        'Position', 'Default_Directory');
 end
 
-msgbox('Settings Saved')
-
-% --------------------------------------------------------------------
-function menu_affine_settings_Callback(hObject, eventdata, handles)
-% hObject    handle to menu_affine_settings (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-if ~isfield(handles, 'SIGMA')
-    handles.SIGMA = 3;
-end
-
-if ~isfield(handles, 'S_STEP')
-    handles.SIGMA = 3;
-end
-
-A = inputdlg({'Sigma','Sample Step'}, 'Affine Flow Settings', 1,...
-    {num2str(handles.SIGMA),num2str(handles.S_STEP)});
-handles.SIGMA = str2double(A{1});
-handles.S_STEP = str2double(A{2});
-
-% Update handles structure
-guidata(hObject, handles);
+msgbox('Settings saved')
 
 
 % --------------------------------------------------------------------
@@ -815,16 +806,16 @@ if isfield(handles,'Region')
     end
 end
 
-if strcmp(handles.ext,'.c3d')
-    % create a new c3d file or overwrite the existing one
-    fileout_suggest = [handles.pname handles.dat_file];
-    [fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
-
-    % write the data to the c3dfile specified
-    cd(pathout);
-    btkWriteAcquisition(c3d_handle,fileout);
-
-end
+% if strcmp(handles.ext,'.c3d')
+%     % create a new c3d file or overwrite the existing one
+%     fileout_suggest = [handles.pname handles.dat_file];
+%     [fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
+% 
+%     % write the data to the c3dfile specified
+%     cd(pathout);
+%     btkWriteAcquisition(c3d_handle,fileout);
+% 
+% end
 
 % --------------------------------------------------------------------
 function menu_load_fascicle_Callback(hObject, eventdata, handles)
@@ -871,30 +862,33 @@ if isfield(handles,'ImStack')
 
             handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
             handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
-            handles.Region(i).ROI{frame_no} = Fdat.Region(i).ROI;
+            %handles.Region(i).ROI{frame_no} = Fdat.Region(i).ROI;
 
 
         end
-        Nregions = length(handles.Region);
-        Nfas = max(Nfascicle);
 
-        % Correct the drop down lists for regions and fascicles to match
-        % imported data
-        ROItoCorrString{1} = 'all';
-        for i = 1:Nregions
-            ROIlistString{i} = num2str(i);
-            ROItoCorrString{i+1} = num2str(i);
-        end
-        set(handles.no_tracked_regions,'String',ROIlistString);
-        set(handles.RegionsToCorrect,'String',ROItoCorrString);
-
-        FAStoCorrString{1} = 'all';
-        for i = 1:Nfas
-            FASlistString{i} = num2str(i);
-            FAStoCorrString{i+1} = num2str(i);
-        end
-        set(handles.no_tracked_fascicles,'String',FASlistString);
-        set(handles.FasciclesToCorrect,'String',FAStoCorrString);
+          %% Add multiple regions and fascicles in a later version
+%         Nregions = length(handles.Region);
+%         Nfas = max(Nfascicle);
+% 
+%         
+%         % Correct the drop down lists for regions and fascicles to match
+%         %imported data
+%         ROItoCorrString{1} = 'all';
+%         for i = 1:Nregions
+%             ROIlistString{i} = num2str(i);
+%             ROItoCorrString{i+1} = num2str(i);
+%         end
+%         set(handles.no_tracked_regions,'String',ROIlistString);
+%         set(handles.RegionsToCorrect,'String',ROItoCorrString);
+% 
+%         FAStoCorrString{1} = 'all';
+%         for i = 1:Nfas
+%             FASlistString{i} = num2str(i);
+%             FAStoCorrString{i+1} = num2str(i);
+%         end
+%         set(handles.no_tracked_fascicles,'String',FASlistString);
+%         set(handles.FasciclesToCorrect,'String',FAStoCorrString);
     else
 
         warndlg('Fascicle data not found','ERROR')
@@ -920,30 +914,23 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
     for i = 1:length(handles.Region)
         for k = 1:length(handles.Region(i).Fascicle)
 
-            % if fascicles have been corrected for drift then save this value
-            % rather than original tracking
-            if isfield(handles.Region(i).Fascicle(k),'fas_x_corr')
-
-                Fdat.Region(i).Fascicle(k).fas_x = handles.Region(i).Fascicle(k).fas_x_corr{frame_no};
-                Fdat.Region(i).Fascicle(k).fas_y = handles.Region(i).Fascicle(k).fas_y_corr{frame_no};
-
-            elseif isfield(handles.Region(i).Fascicle(k),'fas_x')
+            if isfield(handles.Region(i).Fascicle(k),'fas_x')
 
                 Fdat.Region(i).Fascicle(k).fas_x = handles.Region(i).Fascicle(k).fas_x{frame_no};
                 Fdat.Region(i).Fascicle(k).fas_y = handles.Region(i).Fascicle(k).fas_y{frame_no};
 
             end
 
-            % TimTrack_downsample
-            Fdat.Region(i).Fascicle(k).fas_x_Hough = handles.Region(i).Fascicle(k).fas_x_Hough{frame_no};
-            Fdat.Region(i).Fascicle(k).fas_y_Hough = handles.Region(i).Fascicle(k).fas_y_Hough{frame_no};
+            %% TimTrack_downsample
+            %Fdat.Region(i).Fascicle(k).fas_x_Hough = handles.Region(i).Fascicle(k).fas_x_Hough{frame_no};
+            %Fdat.Region(i).Fascicle(k).fas_y_Hough = handles.Region(i).Fascicle(k).fas_y_Hough{frame_no};
 
 
         end
         % also save the ROI data
         Fdat.Region(i).ROIx = handles.Region(i).ROIx{frame_no};
         Fdat.Region(i).ROIy = handles.Region(i).ROIy{frame_no};
-        Fdat.Region(i).ROI = handles.Region(i).ROI{frame_no};
+        %Fdat.Region(i).ROI = handles.Region(i).ROIp{frame_no};
     end
 
     % save to file
@@ -985,7 +972,7 @@ if isfield(handles,'ImStack')
 %     [fileout, pathout, FI] = uiputfile('*.mp4', 'Save video as');
 %     filename = [pathout fileout];
 %     
-    filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
+    filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
     vidObj = VideoWriter(filename,'MPEG-4');
     vidObj.FrameRate = handles.FrameRate;
     open(vidObj);
@@ -996,8 +983,8 @@ if isfield(handles,'ImStack')
         i = 1;
         j = 1;
         
-        for f = 1:1:get(handles.frame_slider,'Max')
-            % create analyzed frame
+        for f = handles.start_frame:1:get(handles.frame_slider,'Max')
+            % create tracked frame
             d = round(size(handles.ImStack,2)/2);
 
             ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
@@ -1092,10 +1079,10 @@ if isfield(handles,'Region')
                 R(i).PEN = handles.Region(i).fas_pen(nz,:)';
             end
 
-            col_head{i} = ['Time\tFascicle Length R' num2str(i) '_F1\tPennation Angle R' num2str(i) '_F1\t'];
+            col_head{i} = ['Time\tFascicle Length R' num2str(i) '_F1\tFascicle Angle R' num2str(i) '_F1\t'];
             col_type{i} = '%3.4f\t%3.6f\t%3.6f';
 
-            data_out{i} = [T R(i).FL(1,:)' R(i).PEN(1,:)'];
+            data_out{i} = [T' R(i).FL(1,:)' R(i).PEN(1,:)'];
 
             if size(R(i).FL',2) > 1
                 for k = 2:size(R(i).FL',2)
@@ -1156,12 +1143,15 @@ if isfield(handles,'Region')
             T = time(nz)';
 
             TrackingData.res = handles.ID;
+            TrackingData.start_frame = handles.start_frame;
             TrackingData.NumFrames = handles.NumFrames;
             %info about tracking for replication purposes
             TrackingData.ProcessingTime = handles.ProcessingTime; %two
             TrackingData.BlockSize = handles.BlockSize;
             TrackingData.Parallel = handles.do_parfor.Value;
             TrackingData.info = "Processing [TimTrack; Opticflow], %%\nBlockSize [width; height], %%\nGains [Apo, Position, Angle]";
+            TrackingData.S = handles.S;
+            TrackingData.D = handles.D;
 
             if isfield(handles,'R')
                 Fdat.R = handles.R;
@@ -1183,7 +1173,7 @@ if isfield(handles,'Region')
     end
 end
 
-filename = [handles.pname, handles.fname(1:end-4), '_analyzed_Q=',strrep(num2str(handles.Q),'.','')];
+filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
 save(filename,'TrackingData','Fdat');
 % [~,handles.file,handles.ext] = fileparts(handles.fname);
 % fileout_suggest = [handles.pname handles.file '.mat'];
@@ -1306,10 +1296,13 @@ menu_clear_tracking_Callback(hObject, eventdata, handles)% clear any current tra
 
 %select file
 [fname, pname] = uigetfile('*.mat', 'Pick a .MAT file');
-load([pname fname],'TrackingData');
+load([pname fname],'TrackingData','Fdat');
 
-handles.Region = TrackingData.Region;
+handles.Region = Fdat.Region;
+handles.start_frame = TrackingData.start_frame;
 handles.NumFrames = TrackingData.NumFrames;
+handles.S = TrackingData.S;
+handles.D = TrackingData.D;
 set(handles.frame_slider,'Min',1);
 set(handles.frame_slider,'Max',handles.NumFrames);
 set(handles.frame_slider,'Value',1);
@@ -1468,7 +1461,7 @@ if isfield(handles,'ImStack')
 
             f = frame_no;
             % add padding
-            currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no), ZeroPadR];
+            currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no+handles.start_frame-1), ZeroPadR];
 
             % add fascicle
             currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
@@ -1498,7 +1491,7 @@ if isfield(handles,'ImStack')
         if exist('ImTrack','var')
             Im = ImTrack;
         else
-            Im = handles.ImStack(:,:,frame_no);
+            Im = handles.ImStack(:,:,frame_no+handles.start_frame-1);
         end
 
         if ~isfield(handles, 'image') || ~isvalid(handles.image)
@@ -2583,10 +2576,10 @@ for k = 1:numel(files) %foreach file
     handles = show_image(hObject,handles);
     
     %create a subfolder where to save results
-    if ~exist([handles.pname 'Analyzed/'], 'dir')
-        mkdir([handles.pname 'Analyzed/'])
+    if ~exist([handles.pname 'Tracked/'], 'dir')
+        mkdir([handles.pname 'Tracked/'])
     end
-    handles.pname = [handles.pname 'Analyzed/'];
+    handles.pname = [handles.pname 'Tracked/'];
 
     for kk = 1:2 %
         if kk == 1
