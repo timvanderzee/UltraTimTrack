@@ -718,7 +718,7 @@ if isfield(handles,'ImStack')
     handles.ImStack     = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
     
     %Crop all images before updating
-    for ii = 1 : handles.NumFrames
+    for ii = handles.start_frame : handles.NumFrames
         handles.ImStack(:,:,ii) = imcrop(ImStackOld(:,:,ii),handles.crop_rect);
     end    
     
@@ -1576,7 +1576,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     % setup current and new image
     frame_no = 1;
     
-    im1 = handles.ImStack(:,:,1);
+    im1 = handles.ImStack(:,:,handles.start_frame);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
    
 
@@ -1590,8 +1590,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
         %% Initialize point tracker and run opticflow
         tstart = tic;
         %calculate block size according to ROI 
-        width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.20);
-        height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.40); %thickness changes?
+        width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.0725); %0.20
+        height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.08); %0.40; thickness changes?
 
         handles.BlockSize = [width height]; %save as width and height for later comparison
 
@@ -1608,9 +1608,9 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 %         pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',10,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
         initialize(pointTracker,points,im1);
 
-        for f = 2:handles.NumFrames
+        for f = frame_no+1:handles.NumFrames
             % Get the current image
-            im2 = handles.ImStack(:,:,f);
+            im2 = handles.ImStack(:,:,f+handles.start_frame-1);
             handles.NIm = im2;
 
             % Compute the flow and new roi
@@ -1678,7 +1678,7 @@ if isfield(handles,'ImStack')
     im2 = imresize(handles.ImStack, 1/handles.imresize_fac);
 
     % call once to get the correct fascicle region
-    auto_ultrasound(im2(:,:,1), parms);
+    auto_ultrasound(im2(:,:,handles.start_frame), parms);
     
     % call again a bunch of times to get estimate the total duration
     for i = 1:min([size(im2,3), 5])
@@ -2080,7 +2080,7 @@ set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 % parms.fas.range = 90 - [-90 89];
 
 % % detect orientation
-data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
+data = imresize(handles.ImStack(:,:,frame_no+handles.start_frame-1), 1/handles.imresize_fac);
 % [geofeatures, ~, parms] = auto_ultrasound(data, parms);
 % alphas = geofeatures.alphas;
 % alphas(alphas==90 | alphas == 180) = [];
