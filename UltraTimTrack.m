@@ -1556,13 +1556,19 @@ handles = Auto_Detect_Callback(hObject, eventdata, handles);
 % Run TimTrack
 if ~isnan(handles.Q)
     handles = process_all_TimTrack(hObject, eventdata, handles);
+    
+    % low-pass filter ROI
+    handles = lowpass_ROI(hObject, eventdata, handles);
 end
 
 % Run UltraTrack (note: includes state estimation on ROI)
 handles = process_all_UltraTrack(hObject, eventdata, handles);
    
+% Correct superficial aponeurosis point
+handles = correct_super_point(hObject, eventdata, handles);
+
 % State estimation
-% handles = do_state_estimation(hObject, eventdata, handles);
+handles = do_state_estimation(hObject, eventdata, handles);
 
 % Update handles structure
 guidata(hObject, handles);
@@ -1626,6 +1632,10 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1)';
                 handles.Region(i).Fascicle(j).fas_y{f} = fas_new(:,2)';
                 
+                % make a copy
+                handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
+                handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
+                
                 % calculate the length and pennation for the current frame
                 handles.Region(i).fas_pen(f,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{f})),...
                     abs(diff(handles.Region(i).Fascicle(j).fas_x{f})));
@@ -1635,12 +1645,8 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
                     diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
 
-                % if TimTrack is done, calc ROI from TimTrack
-                if ~isnan(handles.Q)
-                    n = handles.vidWidth;
-                    handles.Region(i).ROIx{f} = [1 1 n n 1]';
-                    handles.Region(i).ROIy{f} = round([polyval(handles.geofeatures(f).super_coef, 1) polyval(handles.geofeatures(f).deep_coef, [1 n]) polyval(handles.geofeatures(f).super_coef, [n 1])])';
-                else % calc ROI from optical flow
+                % optionally: calc ROI from optical flow
+                if isnan(handles.Q)
                     ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
                     ROI_new = transformPointsForward(w, ROI_prev);
                     handles.Region(i).ROIx{f} = ROI_new(:,1);
@@ -1664,6 +1670,42 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 close(h)
 handles.ProcessingTime(2) = toc(tstart);
 
+function[handles] = correct_super_point(hObject, eventdata, handles)
+    i = 1;
+    frames = 1:handles.NumFrames;
+    fasx = nan(1,length(frames));
+    
+    for f = frames
+        fasx(f) = handles.Region(i).Fascicle.fas_x_original{f}(2);
+    end
+
+    % optionally high-pass filter
+    if ~isnan(handles.fc_hpf)
+        Wn = handles.fc_hpf / (.5 * handles.FrameRate);
+        Wn(Wn>=1) = 1-1e-6;
+        Wn(Wn<=0) = 1e-6;
+
+        [b,a] = butter(2, Wn, 'high');
+        fasx_filt = filtfilt(b,a,fasx);
+        
+        % make sure the first value isn't changed
+        y = fasx_filt + fasx(1) - fasx_filt(1);
+    else
+        y = fasx;
+    end
+
+    for f = frames
+        handles.Region.Fascicle.fas_x{f}(2) = round(y(f));
+
+        % correct the vertical coordinate
+        ROI         = [handles.Region(i).ROIx{f} handles.Region(i).ROIy{f}];
+        super_apo   = ROI([1,4],:);
+        super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
+        handles.Region.Fascicle.fas_y{f}(2) = super_coef(2) + handles.Region.Fascicle.fas_x{f}(2)*super_coef(1);
+        
+%         y1(f) =  handles.Region.Fascicle.fas_y_original{f}(2);
+%         y2(f) =  handles.Region.Fascicle.fas_y{f}(2);
+    end
 
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
@@ -1732,7 +1774,7 @@ if isfield(handles,'ImStack')
             handles.ProcessingTime(1) = toc(tstart);
         end
 
-       % Adjust the parameter of geofeat
+       % Adjust the parameter of geofeatures
         for kk = 1:length(geofeatures)
             geofeatures(kk).super_coef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
             geofeatures(kk).deep_coef(2) = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
@@ -1741,54 +1783,57 @@ if isfield(handles,'ImStack')
 
         handles.geofeatures = geofeatures;
 
+
     end
 end
 
+function[handles] = lowpass_ROI(hObject, eventdata, handles)
+    i = 1;
+    n = handles.vidWidth;
+
+    frames = 1:handles.NumFrames;
+    
+    APO_TT = nan(5,length(frames));
+    for f = frames
+        handles.Region(i).ROIy{f} = round([polyval(handles.geofeatures(f).super_coef, 1) polyval(handles.geofeatures(f).deep_coef, [1 n]) polyval(handles.geofeatures(f).super_coef, [n 1])])';
+        handles.Region(i).ROIx{f} = [1 1 n n 1]';
+            
+        APO_TT(:,f) = handles.Region(i).ROIy{f};
+    end
+        
+    y = nan(size(APO_TT));
+
+    if ~isnan(handles.fc_lpf)
+        Wn = handles.fc_lpf / (.5 * handles.FrameRate);
+        Wn(Wn>=1) = 1-1e-6;
+        Wn(Wn<=0) = 1e-6;
+        [b,a] = butter(2, Wn);
+    
+        for kk = 1:size(APO_TT,1)
+            y(kk,:) = filtfilt(b,a,APO_TT(kk,:));
+        end
+    else
+        y = APO_TT;
+    end
+
+    for f = frames
+        handles.Region.ROIy{f} = round(y(:,f));
+    end
+
+    
 function[handles] = estimate_variance(hObject, eventdata, handles)
 
 geofeatures = handles.geofeatures;
-n = handles.vidWidth;
 
-%%
-x = nan(handles.NumFrames,6);
+
+x = nan(handles.NumFrames,1);
 for f = 1:handles.NumFrames
-    APO_TT = round([polyval(geofeatures(f).super_coef, 1) polyval(geofeatures(f).deep_coef, [1 n]) polyval(geofeatures(f).super_coef, [n 1])])';
-
     x(f,1) = geofeatures(f).alpha;
-    for k = 1:length(APO_TT)
-        x(f,1+k) = APO_TT(k);
-    end
 end
 
-%%
-% X = [handles.Region.Fascicle.fas_x{1}(1) handles.Region.Fascicle.fas_y{1}(1)];
-% 
-% for f = 1:handles.NumFrames
-%     X(f+1,:) = transformPointsForward(handles.Region.warp(:,:,f), X(f,:));
-% end
-% 
-%     %%
-% 
-% L = handles.NumFrames;
-% Fs = handles.FrameRate; 
-% Y = fft(X(:,1)-mean(X(:,1)));
-% 
-% f = Fs/L*(-L/2:L/2-1);
-% P = abs(fftshift(Y));
-% 
-% figure(10)
-% plot(f,P,"LineWidth",3)
-% title("fft Spectrum in the Positive and Negative Frequencies")
-% xlabel("f (Hz)")
-% ylabel("|fft(X)|")
-% 
-% Fdom = max(f(P==max(P)));
-%  
-
-%%
-% filter
-handles.Frequency = 2;
-Wn = 1.5*handles.Frequency / (.5 * handles.FrameRate);
+Wn = 1.5*handles.fc_lpf / (.5 * handles.FrameRate);
+Wn(Wn>=1) = 1-1e-6;
+Wn(Wn<=0) = 1e-6;
 [b,a] = butter(2, Wn);
 
 y = nan(size(x));
@@ -1807,17 +1852,6 @@ function[handles] = do_state_estimation(hObject, eventdata, handles)
 if ~isnan(handles.Q)
     handles = estimate_variance(hObject, eventdata, handles);
 
-
-% start with the original
-% for f = 1:get(handles.frame_slider,'Max')
-%     for i = 1:length(handles.Region)
-%         for j = 1:length(handles.Region(i).Fascicle)
-%             handles.Region(i).Fascicle(j).fas_x{f} = handles.Region(i).Fascicle(j).fas_x_original{f};
-%             handles.Region(i).Fascicle(j).fas_y{f} = handles.Region(i).Fascicle(j).fas_y_original{f};
-%         end
-%     end
-% end
-
 % forward state estimation
 for f = 2:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
@@ -1828,15 +1862,6 @@ for f = 2:get(handles.frame_slider,'Max')
     end
 end
 
-% backward state estimation
-% for f = (get(handles.frame_slider,'Max')-1):-1:1
-%     for i = 1:length(handles.Region)
-%         for j = 1:length(handles.Region(i).Fascicle)
-%             % state estimation
-%             handles = state_estimator(handles,f,f+1,'backward');
-%         end
-%     end
-% end
 show_image(hObject,handles);
 show_data(hObject, handles);
 guidata(hObject, handles);
@@ -1879,23 +1904,11 @@ i = 1; j = 1;
 % 2. fascicle angle
 
 w = handles.Region(i).warp(:,:,prev_frame_no);
-geofeatures = handles.geofeatures;
-n = handles.vidWidth;
 
 % define the initial variance
-handles.Region(1).ROIp{1} = zeros(1,5);
-handles.Region(i).Fascicle(j).fas_p{1} = zeros(1,2);
+handles.Region(i).Fascicle(j).fas_p{1} = 0;
 
 %% Apply warp
-% Aponeurosis
-APO_prev = [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}];
-
-if strcmp(direction,'forward')
-    APO_new = transformPointsForward(w, APO_prev);
-else
-    APO_new = transformPointsInverse(w, APO_prev);
-end
-
 % Fascicle
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
@@ -1911,84 +1924,20 @@ dalpha = abs(atan2d(diff(fas_new(:,2)), diff(fas_new(:,1)))) - abs(atan2d(diff(f
 alpha_new = alpha_prev + dalpha;
 
 % A priori state estimate
-x_minus = [fas_new(2,1) alpha_new];
-
-%% state estimation aponeuroses
-% TimTrack estimate
-APO_TT = round([polyval(geofeatures(frame_no).super_coef, 1) polyval(geofeatures(frame_no).deep_coef, [1 n]) polyval(geofeatures(frame_no).super_coef, [n 1])])';
-
-% loop over aponeurosis points
-for ii = 1:length(APO_new)
-
-    k.x_minus = APO_new(ii,2);
-
-    % Hough estimate of vertical aponeurosis position
-    k.y = APO_TT(ii);
-
-    % previous estimate covariance
-    k.P_prev = handles.Region(i).ROIp{prev_frame_no}(ii);
-
-    % get the process noise and measurement noise covariance
-    dx = APO_new(ii,2) - APO_prev(ii,2);
-    k.Q = getQ(handles, dx);
-
-    k.R = handles.R(ii+1);
-    
-    % run kalman filter
-    K = run_kalman_filter(k);
-
-    % update
-    handles.Region(i).ROIy{frame_no}(ii) = K.x_plus;
-    handles.Region(i).ROIp{frame_no}(ii) = K.P_plus;
-    
-    % if we assume infinite variance in optical flow, take TimTrack
-    if isinf(handles.Q)
-        handles.Region(i).ROIy{frame_no}(ii) = k.y;
-        handles.Region(i).ROIp{frame_no}(ii) = k.R;
-    end
-end
+x_minus = alpha_new;
 
 % fit the current aponeurosis
 ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
-super_apo   = ROI([1,4],:);
 deep_apo    = ROI([2,3],:);
-super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
-%% State estimation superficial aponeurosis attachment
-% previous estimate covariance
-P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
-
-% get the process noise and measurement noise covariance
-dx = sqrt((fas_new(2,1)-fas_prev(2,1)).^2 + (fas_new(2,2)-fas_prev(2,2)).^2);
-s.Q = getQ(handles, dx);
-s.R = handles.X;
-
-% a priori estimate from optical flow
-s.x_minus = x_minus(1);
-
-% 'measurement', here is the first value
-s.y = handles.Region(i).Fascicle(j).fas_x{1}(2);
-
-% previous state covariance
-s.P_prev = P_prev(1);
-
-% run kalman filter
-S = run_kalman_filter(s);
-
-% ascribe
-fasx2 = S.x_plus;
-supP = S.P_plus;
-
-if isinf(handles.Q)
-    fasx2 = s.y;
-    supP = s.R;
-end
-
-% get the vertical point from the estimated aponeurosis
-fasy2 = super_coef(2) + fasx2*super_coef(1);
+% superficial point
+fasx2 = handles.Region(i).Fascicle(j).fas_x{frame_no}(2);
+fasy2 = handles.Region(i).Fascicle(j).fas_y{frame_no}(2);
 
 %% Fascicle angle estimate
+P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
+
 % get the process noise and measurement noise covariance
 dx = abs(dalpha);
 dx(dx<0.005) = 0;
@@ -1996,13 +1945,13 @@ f.Q = getQ(handles, dx);
 f.R = handles.R(1);
 
 % apriori estimate from optical flow
-f.x_minus = x_minus(2);
+f.x_minus = x_minus;
 
 % measurement from Hough transform
 f.y = handles.geofeatures(frame_no).alpha;
 
 % previous state covariance
-f.P_prev = P_prev(2);
+f.P_prev = P_prev;
 
 % run kalman filter
 F = run_kalman_filter(f);
@@ -2031,7 +1980,7 @@ handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 fasx2];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
 
 % state covariance
-handles.Region(i).Fascicle(j).fas_p{frame_no} = [supP fasP];
+handles.Region(i).Fascicle(j).fas_p{frame_no} = fasP;
 
 % kalman xshiftcor for fascicle
 handles.Region(i).Fascicle(j).K(frame_no) = Kgain;
@@ -2277,106 +2226,6 @@ delete(gcp('nocreate'));
 delete(hObject);
 
 
-function resize_fac_Callback(hObject, eventdata, handles)
-% hObject    handle to resize_fac (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of resize_fac as text
-%        str2double(get(hObject,'String')) returns contents of resize_fac as a double
-
-handles.imresize_fac = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-% --- Executes during object creation, after setting all properties.
-function resize_fac_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to resize_fac (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-handles.imresize_fac = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-function Qvalue_Callback(hObject, eventdata, handles)
-% hObject    handle to Qvalue (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of Qvalue as text
-%        str2double(get(hObject,'String')) returns contents of Qvalue as a double
-
-handles.Q = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-% If we have estimates, run state estimation
-if isfield(handles, 'Region')
-    do_state_estimation(hObject, eventdata, handles)
-end
-
-% --- Executes during object creation, after setting all properties.
-function Qvalue_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to Qvalue (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-handles.Q = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-function Xvalue_Callback(hObject, eventdata, handles)
-% hObject    handle to Xvalue (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of Xvalue as text
-%        str2double(get(hObject,'String')) returns contents of Xvalue as a double
-
-handles.X = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
-% If we have estimates, run state estimation
-if isfield(handles, 'Region')
-    do_state_estimation(hObject, eventdata, handles)
-end
-
-% --- Executes during object creation, after setting all properties.
-function Xvalue_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to Xvalue (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-handles.X = str2double(get(hObject,'String'));
-
-% Update handles structure
-guidata(hObject, handles);
-
 % --- Function for detecting borders of the images and returning the rect matrix to crop.
 function ImCropped = autocrop_Tim(Im)
 
@@ -2606,3 +2455,139 @@ for k = 1:numel(files) %foreach file
     end
 end
 
+function freq_lpf_Callback(hObject, eventdata, handles)
+% hObject    handle to freq_lpf (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of freq_lpf as text
+%        str2double(get(hObject,'String')) returns contents of freq_lpf as a double
+
+handles.fc_lpf = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    handles = lowpass_ROI(hObject, eventdata, handles);
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+% --- Executes during object creation, after setting all properties.
+function freq_lpf_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to freq_lpf (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.fc_lpf = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+function freq_hpf_Callback(hObject, eventdata, handles)
+% hObject    handle to freq_hpf (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of freq_hpf as text
+%        str2double(get(hObject,'String')) returns contents of freq_hpf as a double
+
+handles.fc_hpf = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    handles = correct_super_point(hObject, eventdata, handles);
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+% --- Executes during object creation, after setting all properties.
+function freq_hpf_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to freq_hpf (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.fc_hpf = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+function resize_fac_Callback(hObject, eventdata, handles)
+% hObject    handle to resize_fac (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of resize_fac as text
+%        str2double(get(hObject,'String')) returns contents of resize_fac as a double
+
+handles.imresize_fac = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function resize_fac_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to resize_fac (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.imresize_fac = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+function Qvalue_Callback(hObject, eventdata, handles)
+% hObject    handle to Qvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Qvalue as text
+%        str2double(get(hObject,'String')) returns contents of Qvalue as a double
+
+handles.Q = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% If we have estimates, run state estimation
+if isfield(handles, 'Region')
+    do_state_estimation(hObject, eventdata, handles)
+end
+
+% --- Executes during object creation, after setting all properties.
+function Qvalue_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Qvalue (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.Q = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
