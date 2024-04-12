@@ -1563,9 +1563,6 @@ end
 
 % Run UltraTrack (note: includes state estimation on ROI)
 handles = process_all_UltraTrack(hObject, eventdata, handles);
-   
-% Correct superficial aponeurosis point
-handles = correct_super_point(hObject, eventdata, handles);
 
 % State estimation
 handles = do_state_estimation(hObject, eventdata, handles);
@@ -1669,43 +1666,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     
 close(h)
 handles.ProcessingTime(2) = toc(tstart);
-
-function[handles] = correct_super_point(hObject, eventdata, handles)
-    i = 1;
-    frames = 1:handles.NumFrames;
-    fasx = nan(1,length(frames));
-    
-    for f = frames
-        fasx(f) = handles.Region(i).Fascicle.fas_x_original{f}(2);
-    end
-
-    % optionally high-pass filter
-    if ~isnan(handles.fc_hpf)
-        Wn = handles.fc_hpf / (.5 * handles.FrameRate);
-        Wn(Wn>=1) = 1-1e-6;
-        Wn(Wn<=0) = 1e-6;
-
-        [b,a] = butter(2, Wn, 'high');
-        fasx_filt = filtfilt(b,a,fasx);
-        
-        % make sure the first value isn't changed
-        y = fasx_filt + fasx(1) - fasx_filt(1);
-    else
-        y = fasx;
-    end
-
-    for f = frames
-        handles.Region.Fascicle.fas_x{f}(2) = round(y(f));
-
-        % correct the vertical coordinate
-        ROI         = [handles.Region(i).ROIx{f} handles.Region(i).ROIy{f}];
-        super_apo   = ROI([1,4],:);
-        super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
-        handles.Region.Fascicle.fas_y{f}(2) = super_coef(2) + handles.Region.Fascicle.fas_x{f}(2)*super_coef(1);
-        
-%         y1(f) =  handles.Region.Fascicle.fas_y_original{f}(2);
-%         y2(f) =  handles.Region.Fascicle.fas_y{f}(2);
-    end
 
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
@@ -1904,11 +1864,23 @@ i = 1; j = 1;
 % 2. fascicle angle
 
 w = handles.Region(i).warp(:,:,prev_frame_no);
+geofeatures = handles.geofeatures;
+n = handles.vidWidth;
 
 % define the initial variance
-handles.Region(i).Fascicle(j).fas_p{1} = 0;
+handles.Region(1).ROIp{1} = zeros(1,5);
+handles.Region(i).Fascicle(j).fas_p{1} = zeros(1,2);
 
 %% Apply warp
+% Aponeurosis
+APO_prev = [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}];
+
+if strcmp(direction,'forward')
+    APO_new = transformPointsForward(w, APO_prev);
+else
+    APO_new = transformPointsInverse(w, APO_prev);
+end
+
 % Fascicle
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
@@ -1924,20 +1896,52 @@ dalpha = abs(atan2d(diff(fas_new(:,2)), diff(fas_new(:,1)))) - abs(atan2d(diff(f
 alpha_new = alpha_prev + dalpha;
 
 % A priori state estimate
-x_minus = alpha_new;
+x_minus = [fas_new(2,1) alpha_new];
 
 % fit the current aponeurosis
 ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+super_apo   = ROI([1,4],:);
 deep_apo    = ROI([2,3],:);
+super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
-% superficial point
-fasx2 = handles.Region(i).Fascicle(j).fas_x{frame_no}(2);
-fasy2 = handles.Region(i).Fascicle(j).fas_y{frame_no}(2);
-
-%% Fascicle angle estimate
+%% State estimation superficial aponeurosis attachment
+% previous estimate covariance
 P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
 
+% get the process noise and measurement noise covariance
+dx = sqrt((fas_new(2,1)-fas_prev(2,1)).^2 + (fas_new(2,2)-fas_prev(2,2)).^2);
+s.Q = getQ(handles, dx);
+s.R = handles.X;
+
+% a priori estimate from optical flow
+s.x_minus = x_minus(1);
+
+% 'measurement', here is the first value
+s.y = handles.Region(i).Fascicle(j).fas_x{1}(2);
+
+% previous state covariance
+s.P_prev = P_prev(1);
+
+% run kalman filter
+S = run_kalman_filter(s);
+
+% ascribe
+fasx2 = S.x_plus;
+supP = S.P_plus;
+
+if isinf(handles.Q)
+    fasx2 = s.y;
+    supP = s.R;
+elseif isinf(handles.X)
+    fasx2 = s.x_minus;
+    supP = s.Q;
+end
+
+% get the vertical point from the estimated aponeurosis
+fasy2 = super_coef(2) + fasx2*super_coef(1);
+
+%% Fascicle angle estimate
 % get the process noise and measurement noise covariance
 dx = abs(dalpha);
 dx(dx<0.005) = 0;
@@ -1945,13 +1949,13 @@ f.Q = getQ(handles, dx);
 f.R = handles.R(1);
 
 % apriori estimate from optical flow
-f.x_minus = x_minus;
+f.x_minus = x_minus(2);
 
 % measurement from Hough transform
 f.y = handles.geofeatures(frame_no).alpha;
 
 % previous state covariance
-f.P_prev = P_prev;
+f.P_prev = P_prev(2);
 
 % run kalman filter
 F = run_kalman_filter(f);
@@ -1980,7 +1984,7 @@ handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 fasx2];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
 
 % state covariance
-handles.Region(i).Fascicle(j).fas_p{frame_no} = fasP;
+handles.Region(i).Fascicle(j).fas_p{frame_no} = [supP fasP];
 
 % kalman xshiftcor for fascicle
 handles.Region(i).Fascicle(j).K(frame_no) = Kgain;
@@ -1996,6 +2000,7 @@ handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{fram
 
 handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
+
 
 % --- Executes on button press in Auto_Detect.
 function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
@@ -2491,28 +2496,27 @@ handles.fc_lpf = str2double(get(hObject,'String'));
 % Update handles structure
 guidata(hObject, handles);
 
-function freq_hpf_Callback(hObject, eventdata, handles)
-% hObject    handle to freq_hpf (see GCBO)
+function X_value_Callback(hObject, eventdata, handles)
+% hObject    handle to X_value (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of freq_hpf as text
-%        str2double(get(hObject,'String')) returns contents of freq_hpf as a double
+% Hints: get(hObject,'String') returns contents of X_value as text
+%        str2double(get(hObject,'String')) returns contents of X_value as a double
 
-handles.fc_hpf = str2double(get(hObject,'String'));
+handles.X = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
 
 % If we have estimates, run state estimation
 if isfield(handles, 'Region')
-    handles = correct_super_point(hObject, eventdata, handles);
     do_state_estimation(hObject, eventdata, handles)
 end
 
 % --- Executes during object creation, after setting all properties.
-function freq_hpf_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to freq_hpf (see GCBO)
+function X_value_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to X_value (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
@@ -2522,7 +2526,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-handles.fc_hpf = str2double(get(hObject,'String'));
+handles.X = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
