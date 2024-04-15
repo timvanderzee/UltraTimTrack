@@ -2147,7 +2147,7 @@ function flipimage_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % Hint: get(hObject,'Value') returns toggle state of flipimage
-handles.flipimage = get(hObject,'Value');
+handles.flip = get(hObject,'Value');
 if isfield(handles,"Region")
     updateX = @(fas_x) flip(handles.vidWidth - fas_x); %only here we need correction as axis starts from 1 (plotting)
    
@@ -2335,6 +2335,7 @@ for k = 1:numel(files) %foreach file
 
     handles.fname = files(k).name;
     handles.pname = [files(k).folder,'/'];
+    handles.start_frame = 1;
     cd(handles.pname)
     handles.movObj = VideoReader([handles.pname handles.fname]);
     mb = waitbar(0,'Loading Video....');
@@ -2396,7 +2397,6 @@ for k = 1:numel(files) %foreach file
         handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
     end
 
-
     % set the string in the frame_number box to the current frame value (1)
     set(handles.frame_number,'String',num2str(1))
 
@@ -2418,9 +2418,12 @@ for k = 1:numel(files) %foreach file
     handles = AutoCrop_Callback(hObject, eventdata, handles);
 
     %
-    if handles.flipimage % get(hObject,'Value');
-        handles.ImStack = flip(handles.ImStack, 2);
+    if isfield(handles, 'flip')
+        if handles.flip % get(hObject,'Value');
+            handles.ImStack = flip(handles.ImStack, 2);
+        end
     end
+    
     % show
     handles = show_image(hObject,handles);
     
