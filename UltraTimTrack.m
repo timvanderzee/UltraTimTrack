@@ -1565,7 +1565,7 @@ end
 handles = process_all_UltraTrack(hObject, eventdata, handles);
 
 % State estimation
-handles = do_state_estimation(hObject, eventdata, handles);
+% handles = do_state_estimation(hObject, eventdata, handles);
 
 % Update handles structure
 guidata(hObject, handles);
@@ -1822,6 +1822,16 @@ for f = 2:get(handles.frame_slider,'Max')
     end
 end
 
+% backward state estimation
+for f = (get(handles.frame_slider,'Max')-1):-1:2
+    for i = 1:length(handles.Region)
+        for j = 1:length(handles.Region(i).Fascicle)
+            % state estimation
+            handles = state_estimator(handles,f,f+1,'backward');
+        end
+    end
+end
+
 show_image(hObject,handles);
 show_data(hObject, handles);
 guidata(hObject, handles);
@@ -1859,35 +1869,20 @@ K.P_plus = (1-K.K) * K.P_minus;
 function[handles] = state_estimator(handles,frame_no,prev_frame_no, direction)
 
 i = 1; j = 1;
-% the state here is [1x2], consisting of:
-% 1. horizontal position superficial attachment point
-% 2. fascicle angle
-
-w = handles.Region(i).warp(:,:,prev_frame_no);
-geofeatures = handles.geofeatures;
-n = handles.vidWidth;
 
 % define the initial variance
 handles.Region(1).ROIp{1} = zeros(1,5);
 handles.Region(i).Fascicle(j).fas_p{1} = zeros(1,2);
 
 %% Apply warp
-% Aponeurosis
-APO_prev = [handles.Region(i).ROIx{prev_frame_no} handles.Region(i).ROIy{prev_frame_no}];
-
-if strcmp(direction,'forward')
-    APO_new = transformPointsForward(w, APO_prev);
-else
-    APO_new = transformPointsInverse(w, APO_prev);
-end
-
-% Fascicle
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
 
 if strcmp(direction,'forward')
+    w = handles.Region(i).warp(:,:,prev_frame_no);
     fas_new = transformPointsForward(w, fas_prev);
 else
+    w = handles.Region(i).warp(:,:,frame_no);
     fas_new = transformPointsInverse(w, fas_prev);
 end
 
