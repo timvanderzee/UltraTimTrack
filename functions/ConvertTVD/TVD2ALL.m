@@ -6,36 +6,45 @@ function TVDdata = TVD2ALL(TVDfname)
 % Created by: Dominic Farris, The University of Queensland, 13/03/2014
 % Edited by: Brent Raiteri, Ruhr University Bochum, June 2021
 % tested in R2019b
-%Edited by: Paolo Tecchio, Ruhr University Bochum, April 2024 %correct crop, save memory for saving frames.
+% Edited by: Francesco Luciano, University of Milan, April 2024. Tested in
+% R2022b, EchoWave 4.2.0 and 4.3.0
+% Edited by: Paolo Tecchio, Ruhr University Bochum, April 2024 
+% corrected cropping, saved memory during file conversion.
 %
 % Inputs -TVDfname: string containing full path+filename of TVD
 %
-% Outputs -TVDdata.Im: 3D matrix representing 2D grayscale images --> NOT
-% ANYMORE
-%         -TVDdata.Time: Vector of time stamps 
+% Outputs -TVDdata.Time: Vector of time stamps
 %         -TVDdata.Height: Image height in pixels
 %         -TVDdata.Width: Image width in pixels
 %         -TVDdata.Fnum: Number of images
-%          -TVDdata.fpsround: rounded fps
-%% Read TVD 
+%         -TVDdata.fpsround: rounded fps
+%         -Note: 3D matrix representing 2D grayscale images is not saved
+%         anymore
+%% Read TVD
 % Set path to Echo Wave II automation interface client .Net assembly (dll)
-% -the function 'computer' returns the version of matlab (32 or 64 bit) 
+% -the function 'computer' returns the version of matlab (32 or 64 bit)
 % and so the code doesn't do what you want if you're running 32-bit
-% matlab on a 64-bit platform 
+% matlab on a 64-bit platform
 % -therefore specify the path if using a 64-bit platform with 32-bit matlab
 if ~strcmp(computer('arch'), 'win64')
-    asm_path = 'C:\Program Files (x86)\Telemed\Echo Wave II\Config\Plugins\AutoInt1Client.dll';
+    asm_path = 'C:\Program Files (x86)\TELEMED\\Echo Wave II Application\EchoWave II\Config\Plugins\AutoInt1Client.dll'; % 32-bit
+    if ~exist(asm_path(1:end-18),'dir') % Pre 4.1.2
+        asm_path = 'C:\Program Files (x86)\Telemed\Echo Wave II\Config\Plugins\AutoInt1Client.dll';
+    end
 else
-    asm_path = 'C:\Program Files\Telemed\Echo Wave II\Config\Plugins\AutoInt1Client.dll';
+    asm_path = 'C:\Program Files\Telemed\Echo Wave II Application\EchoWave II\Config\Plugins\AutoInt1Client.dll'; % 64-bit
+    if ~exist(asm_path(1:end-18),'dir') % Pre 4.1.2
+        asm_path = 'C:\Program Files\Telemed\Echo Wave II\Config\Plugins\AutoInt1Client.dll';
+    end
 end
 % Create assembly
 asm = NET.addAssembly(asm_path);
 % Create command interface object (CmdInt1)
 cmd = AutoInt1Client.CmdInt1();
-% Connect to running Echo Wave II 
+% Connect to running Echo Wave II
 ret = cmd.ConnectToRunningProgram();
 if (ret ~= 0)
-    error('Cannot connect to Echo Wave II. Please make sure the software is "Run as administrator".')
+    error('Cannot connect to Echo Wave II. Please make sure the software is "Run as administrator" and 32-bit Echo Wave II is installed.')
 end
 % Open TVD file (previously saved using Echo Wave II)
 cmd.OpenFile(TVDfname);
@@ -133,14 +142,14 @@ TVDdata.rect = rect;
 %% Get the scale
 TVDdata.cmPerPixX = cmd.GetUltrasoundPhysicalDeltaX(1);
 TVDdata.cmPerPixY = cmd.GetUltrasoundPhysicalDeltaY(1);
-%% Change image filtering
-% cmd.ParamSet(327,32); %rejection shift from 0 to 32
-% cmd.ParamSet(328,1); %turn on image enhancement 
-%  cmd.ParamSet(329,1); %shift image enhancement from 3 to 4
-%  cmd.ParamSet(330,1); %turn on speckle reduction
-%  cmd.ParamSet(337,8); % ,8 to shift speckle reduction from 3NeatView to 3PureView
-%   cmd.ParamSet(328,0); %turn on image enhancement 
-%   cmd.ParamSet(329,1); %shift image enhancement from 3 to 4
+%% Change image filtering (some examples below)
+% cmd.ParamSet(327,-64); %rejection shift to 0 
+% cmd.ParamSet(328,1); %turn on image enhancement - 0 turns it off
+% cmd.ParamSet(329,1); %shift image enhancement 1 level (e.g. from 3 to 4)
+% cmd.ParamSet(330,1); %turn on speckle reduction
+% cmd.ParamSet(337,-1); %shift speckle reduction 1 level (e.g. from 4 to 3)
+% cmd.ParamSet(338,1); %initialise B Color Map 
+% cmd.ParamSet(338,1); %shift B Color Map 1 level (e.g. from 1 to 2)
 
 %% Save MAT
 % Go through ALL frames and save as grayscale UINT8 image
@@ -149,10 +158,10 @@ MP4fname = strrep(TVDfname,'.tvd','.mp4');
 %AVIfname = strrep(TVDfname,'tvd','avi');
 writerObj = VideoWriter(MP4fname,'MPEG-4');
 %writerObj2 = VideoWriter(AVIfname,'Motion JPEG AVI');
-writerObj.Quality = 100;
+writerObj.Quality = 100; %increased video quality
 
 TVDdata.fpsRound = round(TVDdata.fps/5)*5;
-% if TVDdata.fpsRound > TVDdata.fps %what is this?
+% if TVDdata.fpsRound > TVDdata.fps %in case conversion is not possible
 %     TVDdata.fpsRound = TVDdata.fpsRound-5;
 % end
 writerObj.FrameRate = TVDdata.fps;
@@ -166,12 +175,16 @@ for jj = 1:TVDdata.Fnum
     cmd.GoToFrame1n(jj, true);
     % Get the time stamp
     TVDdata.Time(jj,1) = cmd.GetCurrentFrameTime();
-    % Get two-dimensional grayscale matrix of loaded frame 
+%     % See new settings with a screenshot
+%     if jj == 1
+%         imwrite(uint8(cmd.GetLoadedFrameGray()),strrep(TVDfname,'.tvd','.png'),'png')
+%     end
+    % Get two-dimensional grayscale matrix of loaded frame
     % and crop Echo Wave II borders
     im = imcrop(uint8(cmd.GetLoadedFrameGray()),TVDdata.rect);   
     writeVideo(writerObj, im);    
     waitbar(double(jj)/double(TVDdata.Fnum),h)
-end  
+end
 TVDdata.Time = TVDdata.Time/1000;
 close(h);
 close(writerObj);

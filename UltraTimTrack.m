@@ -306,7 +306,7 @@ if exist([path '/' name '.mat'],"file")
     TVD = load([path '/' name '.mat']);
     if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
         %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
-        ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
+        ImageDepth = round(cast(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,'single'),3)*10;
         handles.ID = ImageDepth;
         set(handles.ImDepthEdit,'String',num2str(ImageDepth));
 
@@ -359,7 +359,7 @@ cd(handles.pname)
 if strcmp(Ext,'.mat')
     handles.Time = handles.TimeStamps;
 elseif exist('TVD','var') && isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
-    handles.Time = TVD.TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them
+    handles.Time = TVD.TVDdata.Time(1:end); %note last timestamp is repeated when recording with Echo Wave II
 else
     handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
 end
