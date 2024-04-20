@@ -172,7 +172,7 @@ im = zeros(TVDdata.Height, TVDdata.Width,'uint8');
 
 for jj = 1:TVDdata.Fnum
     % Go to frame jj
-    cmd.GoToFrame1n(jj, true);
+    cmd.GoToFrame1n(jj, true); % Frame 1
     % Get the time stamp
     TVDdata.Time(jj,1) = cmd.GetCurrentFrameTime();
 %     % See new settings with a screenshot
