@@ -71,7 +71,7 @@ handles.parms = parms;
 
 if ismac || isunix
     if isempty(dir([program_directory '/ultrasound_tracking_settings.mat']))
-        ImageDepth = 65;
+        ImageDepth = 50.7;
         % Needed for KL algorithm, but not KLT algorithm
         %Sigma = 3;
         %S_Step = 3;
@@ -86,7 +86,7 @@ end
 %
 if ispc
     if isempty(dir([program_directory '\ultrasound_tracking_settings.mat']))
-        ImageDepth = 65;
+        ImageDepth = 50.7;
         % Needed for KL algorithm, but not KLT algorithm
         %Sigma = 3;
         %S_Step = 3;
@@ -306,7 +306,7 @@ if exist([path '/' name '.mat'],"file")
     TVD = load([path '/' name '.mat']);
     if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
         %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
-        ImageDepth = round(cast(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,'single'),3)*10;
+        ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
         handles.ID = ImageDepth;
         set(handles.ImDepthEdit,'String',num2str(ImageDepth));
 
@@ -359,7 +359,7 @@ cd(handles.pname)
 if strcmp(Ext,'.mat')
     handles.Time = handles.TimeStamps;
 elseif exist('TVD','var') && isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
-    handles.Time = TVD.TVDdata.Time(1:end); %note last timestamp is repeated when recording with Echo Wave II
+    handles.Time = TVD.TVDdata.Time(1:end-1); %-1 because last timestamp is repeated or UT doesn't load all of them
 else
     handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
 end
@@ -1173,38 +1173,39 @@ if isfield(handles,'Region')
     end
 end
 
-filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
-save(filename,'TrackingData','Fdat');
-% [~,handles.file,handles.ext] = fileparts(handles.fname);
-% fileout_suggest = [handles.pname handles.file '.mat'];
-% [fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
-% cd(pathout);
-% 
-% if exist([pathout fileout], 'file') == 2
-% 
-%     if exist('Data','var') && exist('Fdat','var')
-%         save(fileout,'-append','Fdat','Data','TrackingData')
-%     elseif exist('Fdat','var')
-%         save(fileout,'-append','Fdat','TrackingData')
-%     elseif exist('Data','var')
-%         save(fileout,'-append','Data')
-%     else
-%         warndlg('There was no data to save', 'WARNING!')
-%     end
-% 
-% else
-% 
-%     if exist('Data','var') && exist('Fdat','var')
-%         save(fileout,'Fdat','Data','TrackingData')
-%     elseif exist('Fdat','var')
-%         save(fileout,'Fdat','TrackingData')
-%     elseif exist('Data','var')
-%         save(fileout,'Data')
-%     else
-%         warndlg('There was no data to save', 'WARNING!')
-%     end
+% filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
+% save(filename,'TrackingData','Fdat');
 
-% end
+[~,handles.file,handles.ext] = fileparts(handles.fname);
+fileout_suggest = [handles.pname handles.file '.mat'];
+[fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
+cd(pathout);
+
+if exist([pathout fileout], 'file') == 2
+
+    if exist('Data','var') && exist('Fdat','var')
+        save(fileout,'-append','Fdat','Data','TrackingData')
+    elseif exist('Fdat','var')
+        save(fileout,'-append','Fdat','TrackingData')
+    elseif exist('Data','var')
+        save(fileout,'-append','Data')
+    else
+        warndlg('There was no data to save', 'WARNING!')
+    end
+
+else
+
+    if exist('Data','var') && exist('Fdat','var')
+        save(fileout,'Fdat','Data','TrackingData')
+    elseif exist('Fdat','var')
+        save(fileout,'Fdat','TrackingData')
+    elseif exist('Data','var')
+        save(fileout,'Data')
+    else
+        warndlg('There was no data to save', 'WARNING!')
+    end
+
+end
 
 
 % --- Executes on key press with focus on figure1 and none of its controls.
@@ -1651,9 +1652,12 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 end
                     
                 % set the points
+                points = pointsNew;
                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
                 points = points(inPoints,:);
                 setPoints(pointTracker, points);
+                
+                N(f) = length(points);
                 
             end
 
@@ -1785,7 +1789,6 @@ function[handles] = estimate_variance(hObject, eventdata, handles)
 
 geofeatures = handles.geofeatures;
 
-
 x = nan(handles.NumFrames,1);
 for f = 1:handles.NumFrames
     x(f,1) = geofeatures(f).alpha;
@@ -1817,17 +1820,16 @@ for f = 2:get(handles.frame_slider,'Max')
     for i = 1:length(handles.Region)
         for j = 1:length(handles.Region(i).Fascicle)
             % state estimation
-            handles = state_estimator(handles,f,f-1,'forward');
+            handles = state_estimator(handles,f,f-1);
         end
     end
 end
 
-% backward state estimation
-for f = (get(handles.frame_slider,'Max')-1):-1:2
+% Rauch-Tung-Striebel backwards filter
+for f = (get(handles.frame_slider,'Max')-1):-1:1
     for i = 1:length(handles.Region)
         for j = 1:length(handles.Region(i).Fascicle)
-            % state estimation
-            handles = state_estimator(handles,f,f+1,'backward');
+            handles = state_smoothener(handles,f,f+1);
         end
     end
 end
@@ -1865,26 +1867,94 @@ K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
 % estimated variance
 K.P_plus = (1-K.K) * K.P_minus;
 
+function[handles] = state_smoothener(handles,frame_no,prev_frame_no)
+i = 1;
+j = 1;
 
-function[handles] = state_estimator(handles,frame_no,prev_frame_no, direction)
+Pcorr = handles.Region(i).Fascicle(j).fas_p{frame_no};
+Ppred = handles.Region(i).Fascicle(j).fas_p_minus{prev_frame_no};
+
+xcorr = [handles.Region(i).Fascicle(j).fas_x{frame_no}(2) handles.Region(i).Fascicle(j).alpha{frame_no}];
+xpred = handles.Region(i).Fascicle(j).X_minus{prev_frame_no};
+xsmooth = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}(2) handles.Region(i).Fascicle(j).alpha{prev_frame_no}];
+
+A = ones(1,2);
+Psmooth = ones(1,2);
+
+for m = 1:2
+    A           = Pcorr(m)/Ppred(m); 
+    A(isnan(A)) = 1;
+    
+    xsmooth(m)     = xcorr(m) + A*(xsmooth(m) - xpred(m)); 
+    Psmooth(m)     = Pcorr(m) + A*(Psmooth(m) - Ppred(m)); 
+end
+
+fasx2_smooth = xsmooth(1);
+alpha_smooth = xsmooth(2);
+
+% recalc length and pennation
+% fit the current aponeurosis
+ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+super_apo   = ROI([1,4],:);
+deep_apo    = ROI([2,3],:);
+super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
+deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
+
+% get the vertical point from the estimated aponeurosis
+fasy2_smooth = super_coef(2) + fasx2_smooth*super_coef(1);
+
+% get the deep attachment point from the superficial point and the angle
+fas_coef(1) = -tand(alpha_smooth);
+fas_coef(2) =  fasy2_smooth - fas_coef(1) * fasx2_smooth;
+fasx1_smooth = (fas_coef(2) - deep_coef(2)) / (deep_coef(1) - fas_coef(1));
+fasy1_smooth = deep_coef(2) + fasx1_smooth*deep_coef(1);
+
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_smooth fasx2_smooth];
+handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_smooth fasy2_smooth];
+handles.Region(i).Fascicle(j).alpha{frame_no}       = alpha_smooth;
+handles.Region(i).Fascicle(j).fas_p{frame_no}       = Psmooth;
+
+% calculate the length and pennation for the current frame
+handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
+    abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
+
+scalar = handles.ID/handles.vidHeight;
+
+handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no}/180*pi;
+
+handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
+    diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
+
+
+function[handles] = state_estimator(handles,frame_no,prev_frame_no)
 
 i = 1; j = 1;
 
-% define the initial variance
-handles.Region(1).ROIp{1} = zeros(1,5);
-handles.Region(i).Fascicle(j).fas_p{1} = zeros(1,2);
+% if the second frame, we need to calculate the first frame
+if frame_no == 2
+
+    alpha0 = nan(1,handles.NS);
+    for k = 1:handles.NS
+        alpha0(k) = handles.geofeatures(k).alpha;
+    end
+    
+    handles.Region(i).Fascicle(j).X_plus{1} = [handles.Region(i).Fascicle(j).fas_x{1}(2) mean(alpha0)];
+    handles.Region(i).Fascicle(j).fas_p{1} = [0 var(alpha0)];
+    
+    % a priori is the same as a positeriori
+    handles.Region(i).Fascicle(j).fas_p_minus{1} = handles.Region(i).Fascicle(j).fas_p{1};
+    handles.Region(i).Fascicle(j).X_minus{1} = handles.Region(i).Fascicle(j).X_plus{1};
+   
+    handles = update_Fascicle(handles,1);
+    
+end
 
 %% Apply warp
 fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
 
-if strcmp(direction,'forward')
-    w = handles.Region(i).warp(:,:,prev_frame_no);
-    fas_new = transformPointsForward(w, fas_prev);
-else
-    w = handles.Region(i).warp(:,:,frame_no);
-    fas_new = transformPointsInverse(w, fas_prev);
-end
+w = handles.Region(i).warp(:,:,prev_frame_no);
+fas_new = transformPointsForward(w, fas_prev);
 
 % Estimate the change in fascicle angle from the change in points
 dalpha = abs(atan2d(diff(fas_new(:,2)), diff(fas_new(:,1)))) - abs(atan2d(diff(fas_prev(:,2)), diff(fas_prev(:,1))));
@@ -1892,13 +1962,6 @@ alpha_new = alpha_prev + dalpha;
 
 % A priori state estimate
 x_minus = [fas_new(2,1) alpha_new];
-
-% fit the current aponeurosis
-ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
-super_apo   = ROI([1,4],:);
-deep_apo    = ROI([2,3],:);
-super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
-deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
 %% State estimation superficial aponeurosis attachment
 % previous estimate covariance
@@ -1922,19 +1985,18 @@ s.P_prev = P_prev(1);
 S = run_kalman_filter(s);
 
 % ascribe
-fasx2 = S.x_plus;
-supP = S.P_plus;
+fasx2_plus = S.x_plus;
+fasx2_minus = s.x_minus;
+supP_plus = S.P_plus;
+supP_minus = S.P_minus;
 
 if isinf(handles.Q)
-    fasx2 = s.y;
-    supP = s.R;
+    fasx2_plus = s.y;
+    supP_plus = s.R;
 elseif isinf(handles.X)
-    fasx2 = s.x_minus;
-    supP = s.Q;
+    fasx2_plus = s.x_minus;
+    supP_plus = s.Q;
 end
-
-% get the vertical point from the estimated aponeurosis
-fasy2 = super_coef(2) + fasx2*super_coef(1);
 
 %% Fascicle angle estimate
 % get the process noise and measurement noise covariance
@@ -1956,39 +2018,66 @@ f.P_prev = P_prev(2);
 F = run_kalman_filter(f);
 
 % ascribe
-alpha = F.x_plus;
+alpha_minus = f.x_minus;
+alpha_plus = F.x_plus;
 Kgain = F.K;
-fasP = F.P_plus;
+fasP_plus = F.P_plus;
+fasP_minus = F.P_minus;
 
 if isinf(handles.Q)
-    alpha = f.y;
+    alpha_plus = f.y;
     Kgain = 1;
-    fasP = f.R;
+    fasP_plus = f.R;
 end
 
-% get the deep attachment point from the superficial point and the angle
-fas_coef(1) = -tand(alpha);
-fas_coef(2) =  fasy2 - fas_coef(1) * fasx2;
-fasx1 = (fas_coef(2) - deep_coef(2)) / (deep_coef(1) - fas_coef(1));
-fasy1 = deep_coef(2) + fasx1*deep_coef(1);
-
-%% update
-% state and dependent variables
-handles.Region(i).Fascicle(j).alpha{frame_no}   = alpha;
-handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1 fasx2];
-handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1 fasy2];
+% state estimate
+handles.Region(i).Fascicle(j).X_plus{frame_no}  = [fasx2_plus alpha_plus];
+handles.Region(i).Fascicle(j).X_minus{frame_no} = [fasx2_minus alpha_minus];
 
 % state covariance
-handles.Region(i).Fascicle(j).fas_p{frame_no} = [supP fasP];
+handles.Region(i).Fascicle(j).fas_p{frame_no} = [supP_plus fasP_plus];
+handles.Region(i).Fascicle(j).fas_p_minus{frame_no} = [supP_minus fasP_minus];
 
 % kalman xshiftcor for fascicle
 handles.Region(i).Fascicle(j).K(frame_no) = Kgain;
+
+% update fascicle
+handles = update_Fascicle(handles,frame_no);
+
+function[handles] = update_Fascicle(handles,frame_no)
+i = 1;
+j = 1;
+
+% get the state
+fasx2_plus = handles.Region(i).Fascicle(j).X_plus{frame_no}(1);
+alpha_plus = handles.Region(i).Fascicle(j).X_plus{frame_no}(2);
+
+% fit the current aponeurosis
+ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+super_apo   = ROI([1,4],:);
+deep_apo    = ROI([2,3],:);
+super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
+deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
+
+% get the vertical point from the estimated aponeurosis
+fasy2_plus = super_coef(2) + fasx2_plus*super_coef(1);
+
+% get the deep attachment point from the superficial point and the angle
+fas_coef(1) = -tand(alpha_plus);
+fas_coef(2) =  fasy2_plus - fas_coef(1) * fasx2_plus;
+fasx1_plus = (fas_coef(2) - deep_coef(2)) / (deep_coef(1) - fas_coef(1));
+fasy1_plus = deep_coef(2) + fasx1_plus*deep_coef(1);
+
+%% update
+% state and dependent variables
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_plus fasx2_plus];
+handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_plus fasy2_plus];
+handles.Region(i).Fascicle(j).alpha{frame_no}   = alpha_plus;
 
 % calculate the length and pennation for the current frame
 handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
     abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
 
-scalar = handles.ID;%/handles.vidHeight;
 scalar = handles.ID/handles.vidHeight;
 
 handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no}/180*pi;
@@ -2003,8 +2092,6 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% find current frame number from slider
-frame_no = round(get(handles.frame_slider,'Value'));
 
 w = handles.vidWidth;
 
@@ -2027,6 +2114,9 @@ set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 
 % max range
 % parms.fas.range = 90 - [-90 89];
+
+% find current frame number from slider
+frame_no = round(get(handles.frame_slider,'Value'));
 
 % % detect orientation
 data = imresize(handles.ImStack(:,:,frame_no+handles.start_frame-1), 1/handles.imresize_fac);
@@ -2085,7 +2175,7 @@ for i = 1:size(handles.Region,2)
     else handles.Region(i).Fascicle(j).analysed_frames = sort([handles.Region(i).Fascicle(j).analysed_frames frame_no]);
     end
 
-    handles.Region(i).Fascicle(j).alpha{frame_no} = handles.Region(i).fas_pen(frame_no,j) * 180/pi;
+    handles.Region(i).Fascicle(j).alpha{frame_no} = geofeatures.alpha;
 end
 
 % Update handles structure
@@ -2504,13 +2594,13 @@ function X_value_Callback(hObject, eventdata, handles)
 
 handles.X = str2double(get(hObject,'String'));
 
-% Update handles structure
-guidata(hObject, handles);
-
 % If we have estimates, run state estimation
 if isfield(handles, 'Region')
-    do_state_estimation(hObject, eventdata, handles)
+    handles = do_state_estimation(hObject, eventdata, handles);
 end
+
+% Update handles structure
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function X_value_CreateFcn(hObject, eventdata, handles)
@@ -2569,13 +2659,13 @@ function Qvalue_Callback(hObject, eventdata, handles)
 
 handles.Q = str2double(get(hObject,'String'));
 
-% Update handles structure
-guidata(hObject, handles);
-
 % If we have estimates, run state estimation
 if isfield(handles, 'Region')
-    do_state_estimation(hObject, eventdata, handles)
+    handles = do_state_estimation(hObject, eventdata, handles);
 end
+
+% Update handles structure
+guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
 function Qvalue_CreateFcn(hObject, eventdata, handles)
@@ -2590,6 +2680,40 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 handles.Q = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+function Nstat_Callback(hObject, eventdata, handles)
+% hObject    handle to Nstat (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Nstat as text
+%        str2double(get(hObject,'String')) returns contents of Nstat as a double
+
+handles.NS = str2double(get(hObject,'String'));
+
+if isfield(handles, 'Region')
+    handles = do_state_estimation(hObject, eventdata, handles);
+end
+
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function Nstat_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Nstat (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.NS = str2double(get(hObject,'String'));
 
 % Update handles structure
 guidata(hObject, handles);
