@@ -359,7 +359,7 @@ cd(handles.pname)
 if strcmp(Ext,'.mat')
     handles.Time = handles.TimeStamps;
 elseif exist('TVD','var') && isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
-    handles.Time = TVD.TVDdata.Time(1:end); %note that the last timestamp is repeated in Echo Wave II recordings
+    handles.Time = TVD.TVDdata.Time; %note that the last timestamp is repeated in Echo Wave II recordings
 else
     handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
 end
@@ -1009,9 +1009,9 @@ if isfield(handles,'ImStack')
             ImTrack = currentImage;
             
             % show region
-            spos = floor([handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)]);
-            dpos = floor([handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)]);
-
+            spos = ceil([handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)]);
+            dpos = ceil([handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)]);
+            
             ImTrack(spos(2):(spos(2)+spos(4)),spos(1):(spos(1)+spos(3)),3) = 230;
             ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):(dpos(1)+dpos(3)),2) = 230;
 
