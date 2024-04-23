@@ -5,6 +5,7 @@ clear; close all
 if ~isAdmin
     fprintf(['MATLAB is not running with administrator privileges.\n' ...
         'YOU MUST RUN MATLAB AS ADMIN! \n']);
+    return
 end
 
 %add automatically all files and subfolders dynamically
@@ -30,7 +31,7 @@ for jj = 1:length(TVDfiles)
     waitbar(double(jj-1)/double(length(TVDfiles)),h,...
     ['Overall progress: Processing ' num2str(jj) '/' num2str(length(TVDfiles))])
     % uipickfiles stores filenames as a cell so index to a cell
-    TVDdata = TVD2ALL(TVDfiles{jj}); %TVDresolution
+    TVDdata = TVD2ALL(TVDfiles{jj},'VideoQuality', 85); %TVDresolution
     save(strrep([TVDfiles{jj}],'.tvd','.mat'),'TVDdata')
     clear TVDdata
 end

@@ -24,7 +24,6 @@ function TVDdata = TVD2ALL(TVDfname, varargin)
 %         -TVDdata.Fnum: Number of frames        
 %         -TVDdata.fpsround: rounded fps
 %% Check inputs
-narginchk(1,2)
 
 %parse inputs
 p         = inputParser;        
