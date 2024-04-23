@@ -1797,14 +1797,14 @@ end
 Wn = 1.5*handles.fc_lpf / (.5 * handles.FrameRate);
 Wn(Wn>=1) = 1-1e-6;
 Wn(Wn<=0) = 1e-6;
-[b,a] = butter(2, Wn);
+[b,a] = butter(2, Wn, 'high');
 
 y = nan(size(x));
 for i = 1:size(x,2)
     y(:,i) = filtfilt(b,a,x(:,i));
 end
 
-handles.R = var(x-y);
+handles.R = var(y);
 
 function[handles] = do_state_estimation(hObject, eventdata, handles)
 % hObject    handle to do_state_estimation (see GCBO)
