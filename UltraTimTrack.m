@@ -1644,10 +1644,20 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 
                 % calculate the length and pennation for the current frame
                 handles = calc_fascicle_length_and_pennation(handles,f);
-                    
+                
+                % determine ROI
+                ROI         = handles.Region(i).ROIy{f};
+                super_apo   = ROI([1,4]);
+                deep_apo    = ROI([2,3]);
+
+               thickness = deep_apo - super_apo;
+               r = 0;
+               ROI_cor =   round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+        
                 % set the points
                 points = pointsNew;
-                inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
+%                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
+                inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, ROI_cor);
                 points = points(inPoints,:);
                 setPoints(pointTracker, points);
                 
@@ -1753,10 +1763,13 @@ function[handles] = lowpass_ROI(hObject, eventdata, handles)
     
     APO_TT = nan(5,length(frames));
     for f = frames
-        handles.Region(i).ROIy{f} = round([polyval(handles.geofeatures(f).super_coef, 1) polyval(handles.geofeatures(f).deep_coef, [1 n]) polyval(handles.geofeatures(f).super_coef, [n 1])])';
-        handles.Region(i).ROIx{f} = [1 1 n n 1]';
+            super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]);
+            deep_apo =  polyval(handles.geofeatures(f).deep_coef, [1 n]);
             
-        APO_TT(:,f) = handles.Region(i).ROIy{f};
+            handles.Region(i).ROIy{f} = round([super_apo(1) deep_apo super_apo([2,1])])';
+            handles.Region(i).ROIx{f} = [1 1 n n 1]';
+
+            APO_TT(:,f) = handles.Region(i).ROIy{f};
     end
         
     y = nan(size(APO_TT));
@@ -2045,9 +2058,6 @@ super_apo   = ROI([1,4],:);
 deep_apo    = ROI([2,3],:);
 super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
-
-% deep aponeurosis angle
-gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 
 % get the vertical point from the estimated aponeurosis
 fasy2_plus = super_coef(2) + fasx2_plus*super_coef(1);
