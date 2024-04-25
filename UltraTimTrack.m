@@ -65,6 +65,8 @@ addpath(genpath(mainfoldername));
 load('TimTrack_parms.mat','parms')
 handles.parms = parms;
 
+handles.BlockSize = [31 71]; %initialize it
+
 % check to make sure there is a settings mat-file present, if not then make
 % one in the directory where the m-file sits.
 [program_directory, ~, ~] = fileparts(mfilename('fullpath'));
@@ -1583,7 +1585,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
     im1 = handles.ImStack(:,:,handles.start_frame);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
    
-
     for i = 1:length(handles.Region)
             
         points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
@@ -1593,22 +1594,21 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
         %% Initialize point tracker and run opticflow
         tstart = tic;
-        %calculate block size according to ROI 
-        width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.0725); %0.20
-        height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.08); %0.40; thickness changes?
-
-        handles.BlockSize = [width height]; %save as width and height for later comparison
-
+        %{ calculate block size according to ROI 
+        %width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.0725); %0.20
+        %height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.08); %0.40; thickness changes?
+        %handles.BlockSize = [width height]; %save as width and height for later comparison
         % Ensure vidWidth and vidHeight are both odd numbers
-        if mod(width, 2) == 0
-            width = width + 1; % Increment by 1 to make it odd
-        end
+        % if mod(width, 2) == 0
+        %     width = width + 1; % Increment by 1 to make it odd
+        % end
+        % 
+        % if mod(height, 2) == 0
+        %     height = height + 1; % Increment by 1 to make it odd
+        % end
+        %}
 
-        if mod(height, 2) == 0
-            height = height + 1; % Increment by 1 to make it odd
-        end
-
-        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',[height width]);
+        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
 %         pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',10,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
         initialize(pointTracker,points,im1);
 
@@ -2714,6 +2714,41 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
 end
 
 handles.NS = str2double(get(hObject,'String'));
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --------------------------------------------------------------------
+function manu_set_block_size_Callback(hObject, eventdata, handles)
+% hObject    handle to manu_set_block_size (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+tmp = set_block_size(handles.BlockSize);
+
+if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run Opticflow
+    
+    handles.BlockSize = tmp; % update blocksize according to the new values
+    %re-run Optic flow automatically only if all frames were already
+    %tracked
+    if isfield(handles,'Region')
+
+        for i = 1:length(handles.Region)
+
+            if size(handles.Region(i).Fascicle.analysed_frames,2) > 1
+
+                % Run UltraTrack (note: includes state estimation on ROI)
+                handles = process_all_UltraTrack(hObject, eventdata, handles);
+                % update the image and data using functions
+                show_data(hObject, handles);
+                show_image(hObject, handles);
+                %estimator too???
+            end
+        end
+
+    end
+
+end
 
 % Update handles structure
 guidata(hObject, handles);
