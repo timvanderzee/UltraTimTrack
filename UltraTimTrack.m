@@ -65,7 +65,7 @@ addpath(genpath(mainfoldername));
 load('TimTrack_parms.mat','parms')
 handles.parms = parms;
 
-handles.BlockSize = [31 71]; %initialize it
+handles.BlockSize = [21 71]; %initialize it
 
 % check to make sure there is a settings mat-file present, if not then make
 % one in the directory where the m-file sits.
@@ -2745,10 +2745,11 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
 
                 % Run UltraTrack (note: includes state estimation on ROI)
                 handles = process_all_UltraTrack(hObject, eventdata, handles);
+                % State estimation
+                handles = do_state_estimation(hObject, eventdata, handles);
                 % update the image and data using functions
                 show_data(hObject, handles);
                 show_image(hObject, handles);
-                %estimator too???
             end
         end
 
