@@ -41,9 +41,9 @@ text_prompt = {'Set block size for optic flow (in pixels)', 'Default 21 71', 'He
         % Enforce numeric input only
         input = get(hObject, 'String');
         input = str2double(input);
-        if isempty(input) || isnan(input) || mod(input,2) ~= 1
+        if isempty(input) || isnan(input) || mod(input,2) ~= 1 || input < 5
             set(hObject, 'String',  bk_size_old(1) );
-            errordlg('Input must be an integer odd number', 'Error', 'modal');
+            errordlg('Input must be an odd number > 3', 'Error', 'modal');
         end
     end
 
@@ -52,9 +52,9 @@ text_prompt = {'Set block size for optic flow (in pixels)', 'Default 21 71', 'He
         % Enforce numeric input only
         input = get(hObject, 'String');
         input = str2double(input);
-        if isempty(input) || isnan(input) || mod(input,2) ~= 1
+        if isempty(input) || isnan(input) || mod(input,2) ~= 1 || input < 5
             set(hObject, 'String', bk_size_old(2) );
-            errordlg('Input must be an integer odd number', 'Error', 'modal');
+            errordlg('Input must be an odd number > 3', 'Error', 'modal');
         end
     end
 

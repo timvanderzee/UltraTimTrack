@@ -1422,7 +1422,8 @@ for i = 1:length(handles.Region)
                 FL = handles.Region(i).fas_length(nz,:);
                 PEN = handles.Region(i).fas_pen(nz,:);
 
-                time = 0:dt:((handles.NumFrames-1)*dt);
+                %time = 0:dt:((handles.NumFrames-1)*dt);
+                time = handles.Time;
 
                 for j = 1:length(handles.Region(i).Fascicle)
 
