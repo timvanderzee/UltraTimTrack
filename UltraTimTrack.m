@@ -1420,7 +1420,7 @@ for i = 1:length(handles.Region)
                 dt = 1/handles.FrameRate;
                 nz = logical(handles.Region(i).fas_length(:,1) ~= 0);
                 FL = handles.Region(i).fas_length(nz,:);
-                PEN = handles.Region(i).fas_pen(nz,:) * 180/pi;
+                PEN = handles.Region(i).fas_pen(nz,:);
 
                 time = 0:dt:((handles.NumFrames-1)*dt);
 
@@ -1432,7 +1432,7 @@ for i = 1:length(handles.Region)
                     
                     plot(handles.mat_plot,time(nz),PEN,'r','linewidth',2);
                     set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
-                    handles.mat_plot.YLabel.String = 'Fascicle Angle (deg)';
+                    handles.mat_plot.YLabel.String = 'Pennation (deg)';
                     handles.mat_plot.XLabel.String = 'Time (s)';
                     
                 end
@@ -1532,7 +1532,7 @@ if isfield(handles,'ImStack')
 
     if isfield(handles,'Region')
         FL = handles.Region(1).fas_length;
-        PEN = handles.Region(1).fas_pen * 180/pi;
+        PEN = handles.Region(1).fas_pen;
 
         % add new vertical lines
         line(handles.length_plot, 'xdata', handles.Time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
@@ -1633,15 +1633,6 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                 % make a copy
                 handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
                 handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
-                
-                % calculate the length and pennation for the current frame
-                handles.Region(i).fas_pen(f,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{f})),...
-                    abs(diff(handles.Region(i).Fascicle(j).fas_x{f})));
-
-                scalar = handles.ID/handles.vidHeight;
-
-                handles.Region(i).fas_length(f,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{f}).^2 +...
-                    diff(handles.Region(i).Fascicle(j).fas_x{f}).^2);
 
                 % optionally: calc ROI from optical flow
                 if isnan(handles.Q)
@@ -1650,6 +1641,9 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                     handles.Region(i).ROIx{f} = ROI_new(:,1);
                     handles.Region(i).ROIy{f} = ROI_new(:,2);
                 end
+                
+                % calculate the length and pennation for the current frame
+                handles = calc_fascicle_length_and_pennation(handles,f);
                     
                 % set the points
                 points = pointsNew;
@@ -1913,17 +1907,9 @@ handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_smooth fasx2_smooth];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_smooth fasy2_smooth];
 handles.Region(i).Fascicle(j).alpha{frame_no}       = alpha_smooth;
 handles.Region(i).Fascicle(j).fas_p{frame_no}       = Psmooth;
-
+ 
 % calculate the length and pennation for the current frame
-handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
-    abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
-
-scalar = handles.ID/handles.vidHeight;
-
-handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no}/180*pi;
-
-handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
-    diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
+handles = calc_fascicle_length_and_pennation(handles,frame_no);
 
 
 function[handles] = state_estimator(handles,frame_no,prev_frame_no)
@@ -2045,6 +2031,7 @@ handles.Region(i).Fascicle(j).K(frame_no) = Kgain;
 handles = update_Fascicle(handles,frame_no);
 
 function[handles] = update_Fascicle(handles,frame_no)
+% gets fascicle tracking estimates from the state and tracked aponeuroses
 i = 1;
 j = 1;
 
@@ -2058,6 +2045,9 @@ super_apo   = ROI([1,4],:);
 deep_apo    = ROI([2,3],:);
 super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
 deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
+
+% deep aponeurosis angle
+gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 
 % get the vertical point from the estimated aponeurosis
 fasy2_plus = super_coef(2) + fasx2_plus*super_coef(1);
@@ -2074,18 +2064,31 @@ handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_plus fasx2_plus];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_plus fasy2_plus];
 handles.Region(i).Fascicle(j).alpha{frame_no}   = alpha_plus;
 
+handles = calc_fascicle_length_and_pennation(handles,frame_no);
+
+
+function[handles] = calc_fascicle_length_and_pennation(handles,frame_no)
+i = 1;
+j = 1;
+
+% fit the current aponeurosis
+ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
+deep_apo    = ROI([2,3],:);
+
+% deep aponeurosis angle
+gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
+
 % calculate the length and pennation for the current frame
-handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),...
-    abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
+if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
+    handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no} - gamma;
+else
+    handles.Region(i).fas_pen(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
+end
 
-scalar = handles.ID/handles.vidHeight;
-
-handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no}/180*pi;
-
-handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
+handles.Region(i).fas_length(frame_no,j) = (handles.ID/handles.vidHeight)*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 +...
     diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
 
-
+    
 % --- Executes on button press in Auto_Detect.
 function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % hObject    handle to Auto_Detect (see GCBO)
@@ -2161,14 +2164,6 @@ handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) pol
 
 for i = 1:size(handles.Region,2)
     handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no};handles.Region(i).Fascicle(j).fas_y{frame_no}]';
-    handles.Region(i).fas_pen(frame_no,j) = atan2(abs(diff(handles.Region(i).Fascicle(j).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(j).fas_x{frame_no})));
-
-    if i == 1
-        scalar = handles.ID/handles.vidHeight;
-        handles.CIm = handles.Im;
-    end
-
-    handles.Region(i).fas_length(frame_no,j) = scalar*sqrt(diff(handles.Region(i).Fascicle(j).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(j).fas_x{frame_no}).^2);
 
     if ~isfield(handles.Region(i).Fascicle(j),'analysed_frames')
         handles.Region(i).Fascicle(j).analysed_frames = frame_no;
@@ -2176,6 +2171,7 @@ for i = 1:size(handles.Region,2)
     end
 
     handles.Region(i).Fascicle(j).alpha{frame_no} = geofeatures.alpha;
+    handles = calc_fascicle_length_and_pennation(handles,frame_no);
 end
 
 % Update handles structure
