@@ -1,7 +1,7 @@
 function new_bk_size = set_block_size(bk_size_old)
 
 %% initialize text var for the inputs
-text_prompt = {'Enter the two values of the block size to use for optic-flow (in pixels)', 'Default 71 31', 'Width', 'Height'};
+text_prompt = {'Set block size for optic flow (in pixels)', 'Default 21 71', 'Height', 'Width'};
 
 %% create the object to handle
     % Create a figure window
@@ -16,13 +16,13 @@ text_prompt = {'Enter the two values of the block size to use for optic-flow (in
     % Create input fields 
     %width
     uicontrol('Style', 'text', 'String', text_prompt{3}, ...
-        'Units', 'normalized', 'Position', [0.1 0.5 0.3 0.1],'FontSize',16);
+        'Units', 'normalized', 'Position', [0.1 0.5 0.3 0.1],'FontSize',14);
     input1Edit = uicontrol('Style', 'edit', 'Units', 'normalized', ...
         'Position', [0.4 0.5 0.3 0.1],'String',bk_size_old(1),'Callback', @input1Callback,'FontSize',14);
 
     % height
     uicontrol('Style', 'text', 'String', text_prompt{4}, ...
-        'Units', 'normalized', 'Position', [0.1 0.3 0.3 0.1],'FontSize',16);
+        'Units', 'normalized', 'Position', [0.1 0.3 0.3 0.1],'FontSize',14);
     input2Edit = uicontrol('Style', 'edit', 'Units', 'normalized', ...
         'Position', [0.4 0.3 0.3 0.1],'String',bk_size_old(2),'Callback', @input2Callback,'FontSize',14);
 
