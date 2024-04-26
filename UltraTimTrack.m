@@ -1660,6 +1660,7 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 %                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, ROI_cor);
                 points = points(inPoints,:);
+                points(points<1,:) = [];
                 setPoints(pointTracker, points);
                 
                 N(f) = length(points);
