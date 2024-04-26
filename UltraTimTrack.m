@@ -1555,14 +1555,14 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % detect first frame
-handles = Auto_Detect_Callback(hObject, eventdata, handles);
+%handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % Run TimTrack
 if ~isnan(handles.Q)
     handles = process_all_TimTrack(hObject, eventdata, handles);
 
     % low-pass filter ROI
-%    handles = lowpass_ROI(hObject, eventdata, handles);
+    handles = lowpass_ROI(hObject, eventdata, handles);
 end
 
 % Run UltraTrack (note: includes state estimation on ROI)
@@ -2111,7 +2111,8 @@ deep_apo    = ROI([2,3],:);
 gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 
 % calculate the length and pennation for the current frame
-if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
+%if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
+if isfield(handles.Region(i).Fascicle(j),'alpha') && length(handles.Region(i).Fascicle(j).alpha) >= frame_no && ~isempty(handles.Region(i).Fascicle(j).alpha{frame_no}) 
     handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no} - gamma;
 else
     handles.Region(i).fas_pen(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
@@ -2591,7 +2592,7 @@ guidata(hObject, handles);
 
 % If we have estimates, run state estimation
 if isfield(handles, 'Region')
-%    handles = lowpass_ROI(hObject, eventdata, handles);
+    handles = lowpass_ROI(hObject, eventdata, handles);
     do_state_estimation(hObject, eventdata, handles)
 end
 
