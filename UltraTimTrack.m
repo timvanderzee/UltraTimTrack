@@ -1555,7 +1555,7 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % detect first frame
-handles = Auto_Detect_Callback(hObject, eventdata, handles);
+%handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % Run TimTrack
 if ~isnan(handles.Q)
@@ -1581,11 +1581,14 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
     %% Optical flow and state estimation
     % setup current and new image
-    frame_no = 1;
+    %frame_no = 1;
+    frame_no = round(get(handles.frame_slider,'Value'));
+    %handles.start_frame = frame_no;
+
+    im1 = handles.ImStack(:,:,(handles.start_frame+frame_no)-1);
     
-    im1 = handles.ImStack(:,:,handles.start_frame);
     h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
-   
+    %forward region?
     for i = 1:length(handles.Region)
             
         points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
@@ -1615,13 +1618,13 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
         for f = frame_no+1:handles.NumFrames
             % Get the current image
-            im2 = handles.ImStack(:,:,f+handles.start_frame-1);
+            im2 = handles.ImStack(:,:,f); %handles.start_frame-1);
             handles.NIm = im2;
 
             % Compute the flow and new roi
             [pointsNew, isFound] = step(pointTracker, im2);
             [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
-            handles.Region(i).warp(:,:,f-1) = w;
+            handles.Region(i).warp(:,:,f) = w;
 
             for j = 1:length(handles.Region(i).Fascicle)
 
@@ -1654,6 +1657,77 @@ function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
                thickness = deep_apo - super_apo;
                r = 0;
                ROI_cor =   round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+        
+                % set the points
+                points = pointsNew;
+%                 inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
+                inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, ROI_cor);
+                points = points(inPoints,:);
+                points(points<1,:) = [];
+                setPoints(pointTracker, points);
+                
+                N(f) = length(points);
+                
+            end
+
+%             profile viewer
+            frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
+            waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
+        end
+
+        
+        %re -get im1
+        points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
+        points = double(points.Location);
+        [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
+        points = points(inPoints,:);
+
+        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
+        %re-initialize pts of the current frame
+        initialize(pointTracker,points,im1);
+
+        %backwards optic
+        for f = frame_no -1 : -1 :handles.start_frame %back to the cut one
+            % Get the current image
+            im2 = handles.ImStack(:,:,f); %handles.start_frame-1);
+            handles.NIm = im2;
+
+            % Compute the flow and new roi
+            [pointsNew, isFound] = step(pointTracker, im2);
+            [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
+            handles.Region(i).warp(:,:,f) = w;
+
+            for j = 1:length(handles.Region(i).Fascicle)
+
+                % apply the warp to fascicles
+                fas_prev = [handles.Region(i).Fascicle(j).fas_x{f+1}' handles.Region(i).Fascicle(j).fas_y{f+1}'];
+                fas_new = transformPointsForward(w, fas_prev);
+                handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1)';
+                handles.Region(i).Fascicle(j).fas_y{f} = fas_new(:,2)';
+                
+                % make a copy
+                handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
+                handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
+
+                % optionally: calc ROI from optical flow
+                if isnan(handles.Q)
+                    ROI_prev = [handles.Region(i).ROIx{f+1} handles.Region(i).ROIy{f+1}];
+                    ROI_new = transformPointsForward(w, ROI_prev);
+                    handles.Region(i).ROIx{f} = ROI_new(:,1);
+                    handles.Region(i).ROIy{f} = ROI_new(:,2);
+                end
+
+                % calculate the length and pennation for the current frame
+                handles = calc_fascicle_length_and_pennation(handles,f+1);
+                
+                % determine ROI
+                ROI         = handles.Region(i).ROIy{f};
+                super_apo   = ROI([1,4]);
+                deep_apo    = ROI([2,3]);
+
+                thickness = deep_apo - super_apo;
+                r = 0;
+                ROI_cor =   round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
         
                 % set the points
                 points = pointsNew;
@@ -2091,7 +2165,8 @@ deep_apo    = ROI([2,3],:);
 gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 
 % calculate the length and pennation for the current frame
-if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
+%if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
+if isfield(handles.Region(i).Fascicle(j),'alpha') && length(handles.Region(i).Fascicle(j).alpha) >= frame_no && ~isempty(handles.Region(i).Fascicle(j).alpha{frame_no}) 
     handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no} - gamma;
 else
     handles.Region(i).fas_pen(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
