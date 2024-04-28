@@ -1591,12 +1591,21 @@ for i = 1:length(handles.Region)
     points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
     points = double(points.Location);
     %[inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
-    x1 = min(handles.geofeatures(frame_no).x);
-    x2 = max(handles.geofeatures(frame_no).x);
-    y1 = min(handles.geofeatures(frame_no).y);
-    y2 = max(handles.geofeatures(frame_no).y);
-    handles.Region(i).LocalROIx{frame_no} = [x1 x1 x2 x2 x1]';
-    handles.Region(i).LocalROIy{frame_no} = [y1 y2 y2 y1 y1]';
+    if isfield(handles,'geofeatures')
+        x1 = min(handles.geofeatures(frame_no).x);
+        x2 = max(handles.geofeatures(frame_no).x);
+        y1 = min(handles.geofeatures(frame_no).y);
+        y2 = max(handles.geofeatures(frame_no).y);
+        handles.Region(i).LocalROIx{frame_no} = [x1 x1 x2 x2 x1]';
+        handles.Region(i).LocalROIy{frame_no} = [y1 y2 y2 y1 y1]';
+    else
+        x1 = min(handles.Region(i).Fascicle(i).fas_x{frame_no});
+        x2 = max(handles.Region(i).Fascicle(i).fas_x{frame_no});
+        y1 = min(handles.Region(i).Fascicle(i).fas_y{frame_no});
+        y2 = max(handles.Region(i).Fascicle(i).fas_y{frame_no});
+        handles.Region(i).LocalROIx{frame_no} = [x1 x1 x2 x2 x1]';
+        handles.Region(i).LocalROIy{frame_no} = [y1 y2 y2 y1 y1]';
+    end
     [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{frame_no}, handles.Region(i).LocalROIy{frame_no});
     points = points(inPoints,:);
 
@@ -1670,19 +1679,41 @@ for i = 1:length(handles.Region)
             %points = pointsNew;
             %inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
             %inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, ROI_cor);
-            x1 = min(handles.geofeatures(f).x);
-            x2 = max(handles.geofeatures(f).x);
-            y1 = min(handles.geofeatures(f).y);
-            y2 = max(handles.geofeatures(f).y);
-            handles.Region(i).LocalROIx{f} = [x1 x1 x2 x2 x1]';
-            handles.Region(i).LocalROIy{f} = [y1 y2 y2 y1 y1]';
-            points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-            points = double(points.Location);
+
+            if isfield(handles,'geofeatures')
+
+                x1 = min(handles.geofeatures(f).x);
+                x2 = max(handles.geofeatures(f).x);
+                y1 = min(handles.geofeatures(f).y);
+                y2 = max(handles.geofeatures(f).y);
+                handles.Region(i).LocalROIx{f} = [x1 x1 x2 x2 x1]';
+                handles.Region(i).LocalROIy{f} = [y1 y2 y2 y1 y1]';
+
+            else
+                x1 = min(handles.Region(i).Fascicle(j).fas_x{f});
+                x2 = max(handles.Region(i).Fascicle(j).fas_x{f});
+                y1 = min(handles.Region(i).Fascicle(j).fas_y{f});
+                y2 = max(handles.Region(i).Fascicle(j).fas_y{f});
+                handles.Region(i).LocalROIx{f} = [x1 x1 x2 x2 x1]';
+                handles.Region(i).LocalROIy{f} = [y1 y2 y2 y1 y1]';
+
+            end
+
             [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{f}, handles.Region(i).LocalROIy{f});
             points = points(inPoints,:);
             points(points<1,:) = [];
-            setPoints(pointTracker, points);
 
+            if length(points) < 100
+
+                points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
+                points = double(points.Location);
+                [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{f}, handles.Region(i).LocalROIy{f});
+                points = points(inPoints,:);
+                points(points<1,:) = [];
+
+            end
+
+            setPoints(pointTracker, points);
             N(f) = length(points);
 
         end
