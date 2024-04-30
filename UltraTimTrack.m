@@ -545,8 +545,13 @@ function[handles] = clear_fascicle_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 if isfield(handles,'ImStack')
+    %remove opticflow and state estimated
     if isfield(handles,'Region')
         handles = rmfield(handles,'Region');
+    end
+    %remove timtrack 
+    if isfield(handles,'geofeatures')
+        handles = rmfield(handles, 'geofeatures');
     end
 
     % reset tracking
@@ -555,6 +560,7 @@ if isfield(handles,'ImStack')
         handles = rmfield(handles, 'ImTrack');
     end
 
+    
 
     % set current frame to 1
     set(handles.frame_slider,'Value',1);
@@ -2795,8 +2801,12 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
 
         for i = 1:length(handles.Region)
 
-            if size(handles.Region(i).Fascicle.analysed_frames,2) > 1
+            %check whether all frames have been already tracked with
+            %opticflow, if yes re-run it with the new block size
+            if sum(cellfun(@isempty, handles.Region.Fascicle.fas_x, 'UniformOutput', true)) == 0
 
+            %if size(handles.Region(i).Fascicle.analysed_frames,2) > 0 %double check this
+            
                 % Run UltraTrack (note: includes state estimation on ROI)
                 handles = process_all_UltraTrack(hObject, eventdata, handles);
                 % State estimation
@@ -2808,8 +2818,8 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
         end
 
     end
-
+    % Update handles structure
+    guidata(hObject, handles);
 end
 
-% Update handles structure
-guidata(hObject, handles);
+
