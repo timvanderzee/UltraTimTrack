@@ -2725,9 +2725,12 @@ function Qvalue_Callback(hObject, eventdata, handles)
 
 handles.Q = str2double(get(hObject,'String'));
 
-% If we have estimates, run state estimation
+% If we have estimates ALL frames, run state estimation otherwise just
+% update Q value
 if isfield(handles, 'Region')
-    handles = do_state_estimation(hObject, eventdata, handles);
+     if sum(~cellfun(@isempty, handles.Region.Fascicle.fas_x, 'UniformOutput', true)) == handles.NumFrames
+            handles = do_state_estimation(hObject, eventdata, handles);
+     end
 end
 
 % Update handles structure
@@ -2803,8 +2806,7 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
 
             %check whether all frames have been already tracked with
             %opticflow, if yes re-run it with the new block size
-            if sum(cellfun(@isempty, handles.Region.Fascicle.fas_x, 'UniformOutput', true)) == 0
-
+            if sum(~cellfun(@isempty, handles.Region.Fascicle.fas_x, 'UniformOutput', true)) == handles.NumFrames
             %if size(handles.Region(i).Fascicle.analysed_frames,2) > 0 %double check this
             
                 % Run UltraTrack (note: includes state estimation on ROI)
