@@ -851,13 +851,15 @@ if isfield(handles,'ImStack')
                 handles.Region(i).Fascicle(k).current_xy(1,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(1);
                 handles.Region(i).Fascicle(k).current_xy(2,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(2);
                 handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
+                %Add ROI data
+                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
+                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
 
-                handles.Region(i).fas_pen(frame_no,k) = atan2(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
-                scalar = handles.ID;%/handles.vidHeight;
-                handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
-
-
-
+                % handles.Region(i).fas_pen(frame_no,k) = atan2d(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
+                % scalar = handles.ID;%/handles.vidHeight;
+                % handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
+                % calculate fascicle length and penn
+                handles = calc_fascicle_length_and_pennation(handles,frame_no);
 
                 if ~isfield(handles.Region(i).Fascicle(k),'analysed_frames')
                     handles.Region(i).Fascicle(k).analysed_frames = frame_no;
@@ -867,11 +869,6 @@ if isfield(handles,'ImStack')
             end
 
             Nfascicle(i) = length(handles.Region(i).Fascicle);
-
-            handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
-            handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
-            %handles.Region(i).ROI{frame_no} = Fdat.Region(i).ROI;
-
 
         end
 
@@ -903,7 +900,7 @@ if isfield(handles,'ImStack')
 
     end
 
-
+    show_data(hObject,handles);
     show_image(hObject,handles);
 
 end
