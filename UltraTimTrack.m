@@ -1474,6 +1474,13 @@ if isfield(handles,'ImStack')
             currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
                 handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
 
+            if isfield(handles,'points')
+                if ~isempty(handles.points{f})
+                    currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
+                    currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
+                end
+            end
+
             currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
                 handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
 
@@ -1488,6 +1495,7 @@ if isfield(handles,'ImStack')
             % show region
             set(handles.S, 'Position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.super.cut)*handles.vidHeight])
             set(handles.D, 'Position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.deep.cut)*handles.vidHeight])
+
         end
     end
 
@@ -1515,9 +1523,10 @@ if isfield(handles,'ImStack')
 
     % if we're showing original, show the aponeurosis regions
     if ~isfield(handles,'ImTrack') && (~isfield(handles, 'S') || ~isvalid(handles.S))
-        handles.S = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
-        handles.D = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
+        handles.S = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
+        handles.D = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight handles.vidWidth diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
     end
+
 
     % Update Im and NIm
     handles.Im = Im;
@@ -1558,7 +1567,7 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % detect first frame
-%handles = Auto_Detect_Callback(hObject, eventdata, handles);
+handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % Run TimTrack
 if ~isnan(handles.Q)
@@ -1572,73 +1581,77 @@ end
 handles = process_all_UltraTrack(hObject, eventdata, handles);
 
 % State estimation
-% handles = do_state_estimation(hObject, eventdata, handles);
-
-% Update handles structure
-guidata(hObject, handles);
+handles = do_state_estimation(hObject, eventdata, handles);
 
 % update the image axes using show_image function (bottom)
 show_data(hObject, handles);
 
-function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
+% Update handles structure
+guidata(hObject, handles);
 
-%% Optical flow and state estimation
-% setup current and new image
-frame_no = 1;
+function[handles] = process_all_UltraTrack(hObject, eventdata, handles)
 
 im1 = handles.ImStack(:,:,handles.start_frame);
 h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Running UltraTrack...');
 
+tstart = tic;
+
 for i = 1:length(handles.Region)
+    for f = 1:handles.NumFrames
 
-    points = detectMinEigenFeatures(im1,'FilterSize',11, 'MinQuality', 0.005);
-    points = double(points.Location);
-    %[inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{frame_no}, handles.Region(i).ROIy{frame_no});
+    M = ones(size(im1,1), size(im1,2), handles.parms.fas.npeaks);
+
     if isfield(handles,'geofeatures')
-        x1 = min(handles.geofeatures(frame_no).x);
-        x2 = max(handles.geofeatures(frame_no).x);
-        y1 = min(handles.geofeatures(frame_no).y);
-        y2 = max(handles.geofeatures(frame_no).y);
-        handles.Region(i).LocalROIx{frame_no} = [x1 x1 x2 x2 x1]';
-        handles.Region(i).LocalROIy{frame_no} = [y1 y2 y2 y1 y1]';
-    else
-        x1 = min(handles.Region(i).Fascicle(i).fas_x{frame_no});
-        x2 = max(handles.Region(i).Fascicle(i).fas_x{frame_no});
-        y1 = min(handles.Region(i).Fascicle(i).fas_y{frame_no});
-        y2 = max(handles.Region(i).Fascicle(i).fas_y{frame_no});
-        handles.Region(i).LocalROIx{frame_no} = [x1 x1 x2 x2 x1]';
-        handles.Region(i).LocalROIy{frame_no} = [y1 y2 y2 y1 y1]';
+        M(:) = 0;
+        for j = 1:handles.parms.fas.npeaks
+            x1 = handles.geofeatures(f).x(j,1) * handles.imresize_fac;
+            y1 = handles.geofeatures(f).y(j,1) * handles.imresize_fac;
+
+            x2 = handles.geofeatures(f).x(j,2) * handles.imresize_fac;
+            y2 = handles.geofeatures(f).y(j,2) * handles.imresize_fac;
+
+            dy = 5;
+
+            ROIx = [x1 x1 x2 x2 x1];
+            ROIy = [y1-dy y1+dy y2+dy y2-dy y1-dy]';
+
+            if sum(isfinite(ROIx)) == length(ROIx) && sum(isfinite(ROIy)) == length(ROIy)
+                M(:,:,j) = poly2mask(ROIx,ROIy, size(im1,1), size(im1,2));
+            end
+        end
     end
-    [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{frame_no}, handles.Region(i).LocalROIy{frame_no});
-    points = points(inPoints,:);
 
-    %% Initialize point tracker and run opticflow
-    tstart = tic;
-    %{ calculate block size according to ROI
-    %width       = floor(max(abs(diff(handles.Region.ROIx{frame_no}))) * 0.0725); %0.20
-    %height      = floor(max(abs(diff(handles.Region.ROIy{frame_no}))) * 0.08); %0.40; thickness changes?
-    %handles.BlockSize = [width height]; %save as width and height for later comparison
-    % Ensure vidWidth and vidHeight are both odd numbers
-    % if mod(width, 2) == 0
-    %     width = width + 1; % Increment by 1 to make it odd
-    % end
-    %
-    % if mod(height, 2) == 0
-    %     height = height + 1; % Increment by 1 to make it odd
-    % end
-    %}
+    n = handles.vidWidth;
+    ROIx = [1 1 n n 1]';
+    super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]');
+    deep_apo = polyval(handles.geofeatures(f).deep_coef, [1 n]');
+    thickness = deep_apo - super_apo;
 
-    pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
-    %         pointTracker = vision.PointTracker('NumPyramidLevels',1,'MaxIterations',10,'MaxBidirectionalError',inf,'BlockSize',[21 71]);
-    initialize(pointTracker,points,im1);
+    r = .1;
+    ROIy = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
 
-    for f = frame_no+1:handles.NumFrames
-        % Get the current image
-        im2 = handles.ImStack(:,:,f+handles.start_frame-1);
-        handles.NIm = im2;
+    mask = sum(M,3) .* poly2mask(ROIx, ROIy,  size(im1,1), size(im1,2));
+    mask(mask>1) = 1;
 
+    % extract image
+    im = handles.ImStack(:,:,f);
+
+    if f == 1
+        % apply mask and determine feature points
+        I = im;
+        I(mask~=1) = 0;
+
+        % detect points
+        points = detectMinEigenFeatures(I,'FilterSize',11, 'MinQuality', 0.005);
+        points = points.selectStrongest(300);
+        points = double(points.Location);
+
+        % define tracker
+        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
+        initialize(pointTracker,points,im);
+    else
         % Compute the flow and new roi
-        [pointsNew, isFound] = step(pointTracker, im2);
+        [pointsNew, isFound] = step(pointTracker, im);
         [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
         handles.Region(i).warp(:,:,f-1) = w;
 
@@ -1654,72 +1667,27 @@ for i = 1:length(handles.Region)
             handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
             handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
 
-            if ~isnan(handles.Q)
-                n = handles.vidWidth;
-                handles.Region(i).ROIx{f} = [1 1 n n 1]';
-                handles.Region(i).ROIy{f} = round([polyval(handles.geofeatures(f).super_coef, 1) polyval(handles.geofeatures(f).deep_coef, [1 n]) polyval(handles.geofeatures(f).super_coef, [n 1])])';
-                % optionally: calc ROI from optical flow
-            else %isnan(handles.Q)
-                ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
-                ROI_new = transformPointsForward(w, ROI_prev);
-                handles.Region(i).ROIx{f} = ROI_new(:,1);
-                handles.Region(i).ROIy{f} = ROI_new(:,2);
-            end
-
             % calculate the length and pennation for the current frame
             handles = calc_fascicle_length_and_pennation(handles,f);
+ 
+            % apply mask to image
+            I = im;
+            I(mask~=1) = 0;
 
-            % determine ROI
-%             ROI         = handles.Region(i).ROIy{f};
-%             super_apo   = ROI([1,4]);
-%             deep_apo    = ROI([2,3]);
-% 
-%             thickness = deep_apo - super_apo;
-%             r = 0;
-%             ROI_cor =   round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+            % detect new points
+            points = detectMinEigenFeatures(I,'FilterSize',11, 'MinQuality', 0.005);
+            points = points.selectStrongest(300);
+            points = double(points.Location);
 
-            % set the points
-            %points = pointsNew;
-            %inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
-            %inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, ROI_cor);
-
-            if isfield(handles,'geofeatures')
-
-                x1 = min(handles.geofeatures(f).x);
-                x2 = max(handles.geofeatures(f).x);
-                y1 = min(handles.geofeatures(f).y);
-                y2 = max(handles.geofeatures(f).y);
-                handles.Region(i).LocalROIx{f} = [x1 x1 x2 x2 x1]';
-                handles.Region(i).LocalROIy{f} = [y1 y2 y2 y1 y1]';
-
-            else
-                x1 = min(handles.Region(i).Fascicle(j).fas_x{f});
-                x2 = max(handles.Region(i).Fascicle(j).fas_x{f});
-                y1 = min(handles.Region(i).Fascicle(j).fas_y{f});
-                y2 = max(handles.Region(i).Fascicle(j).fas_y{f});
-                handles.Region(i).LocalROIx{f} = [x1 x1 x2 x2 x1]';
-                handles.Region(i).LocalROIy{f} = [y1 y2 y2 y1 y1]';
-
-            end
-
-            [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{f}, handles.Region(i).LocalROIy{f});
-            points = points(inPoints,:);
-            points(points<1,:) = [];
-
-            if length(points) < 100
-
-                points = detectMinEigenFeatures(im2,'FilterSize',11, 'MinQuality', 0.005);
-                points = double(points.Location);
-                [inPoints] = inpolygon(points(:,1),points(:,2), handles.Region(i).LocalROIx{f}, handles.Region(i).LocalROIy{f});
-                points = points(inPoints,:);
-                points(points<1,:) = [];
-
-            end
-
+            % set tracker
             setPoints(pointTracker, points);
-            N(f) = length(points);
 
         end
+
+    end
+
+        % save the points
+        handles.points{f} = points;
 
         %             profile viewer
         frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
@@ -2166,11 +2134,11 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 w = handles.vidWidth;
 
 if ~isvalid(handles.S)
-    handles.S = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
+    handles.S = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
 end
 
 if ~isvalid(handles.D)
-    handles.D = images.roi.Rectangle(gca,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
+    handles.D = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
 end
 
 %% Aponeurosis detection
