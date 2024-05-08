@@ -1606,10 +1606,16 @@ tstart = tic;
 
 for i = 1:length(handles.Region)
     for f = 1:handles.NumFrames
-
+        
+    % extract image
+    im = handles.ImStack(:,:,f);
+    
+    % make a copy
+    I_masked = im;
+        
     M = ones(size(im1,1), size(im1,2), handles.parms.fas.npeaks);
 
-    if isfield(handles,'geofeatures')
+    if isfield(handles,'geofeatures') && strcmp(handles.ROItype, 'Hough - local')
         M(:) = 0;
         for j = 1:handles.parms.fas.npeaks
             x1 = handles.geofeatures(f).x(j,1) * handles.imresize_fac;
@@ -1627,75 +1633,98 @@ for i = 1:length(handles.Region)
                 M(:,:,j) = poly2mask(ROIx,ROIy, size(im1,1), size(im1,2));
             end
         end
+        
+        % mask
+        mask = sum(M,3);
+        mask(mask>1) = 1;
+
+        I_masked(mask~=1) = 0;
     end
+    
+    
+    % get current ROI
+    if strcmp(handles.ROItype(1:5), 'Hough')
+        n = handles.vidWidth;
+        ROIx = [1 1 n n 1]';
+        super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]');
+        deep_apo = polyval(handles.geofeatures(f).deep_coef, [1 n]');
+        thickness = deep_apo - super_apo;
 
-    n = handles.vidWidth;
-    ROIx = [1 1 n n 1]';
-    super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]');
-    deep_apo = polyval(handles.geofeatures(f).deep_coef, [1 n]');
-    thickness = deep_apo - super_apo;
+        r = .1;
+        ROIy = round([super_apo(1); deep_apo; super_apo([2,1])]);
+        
+        ROIy_cor = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+        
+        % mask
+        mask = poly2mask(ROIx, ROIy_cor, size(im,1), size(im,2));
+        I_masked(mask~=1) = 0;
+    end
+    
 
-    r = .1;
-    ROIy = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+%         % apply the warp to ROI
+%         ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
+%         ROI_new = transformPointsForward(w, ROI_prev);
+% 
+%         ROIx = ROI_new(:,1);
+%         ROIy = ROI_new(:,2);
+%     end
 
-    mask = sum(M,3) .* poly2mask(ROIx, ROIy,  size(im1,1), size(im1,2));
-    mask(mask>1) = 1;
+   
+    for j = 1:length(handles.Region(i).Fascicle)
 
-    % extract image
-    im = handles.ImStack(:,:,f);
 
-    if f == 1
-        % apply mask and determine feature points
-        I = im;
-        I(mask~=1) = 0;
+        % only consider points inside global ROI
+%         inPoints = inpolygon(points(:,1),points(:,2), ROIx, ROIy);
+%         points = points(inPoints,:);
 
-        % detect points
-        points = detectMinEigenFeatures(I,'FilterSize',11, 'MinQuality', 0.005);
-        points = points.selectStrongest(300);
-        points = double(points.Location);
-
-        % define tracker
-        pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
-        initialize(pointTracker,points,im);
-    else
-        % Compute the flow and new roi
-        [pointsNew, isFound] = step(pointTracker, im);
-        [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
-        handles.Region(i).warp(:,:,f-1) = w;
-
-        for j = 1:length(handles.Region(i).Fascicle)
+        if f == 1
+            % detect points
+            points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
+            points = points.selectStrongest(300);
+            points = double(points.Location);
+            
+            % define tracker
+            pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
+            initialize(pointTracker,points,im);
+        else
+            % Compute the flow and new roi
+            [pointsNew, isFound] = step(pointTracker, im);
+            [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
+            handles.Region(i).warp(:,:,f-1) = w;
 
             % apply the warp to fascicles
             fas_prev = [handles.Region(i).Fascicle(j).fas_x{f-1}' handles.Region(i).Fascicle(j).fas_y{f-1}'];
             fas_new = transformPointsForward(w, fas_prev);
+            
+            % save
             handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1)';
             handles.Region(i).Fascicle(j).fas_y{f} = fas_new(:,2)';
 
-            % make a copytransform
+            % make a copy
             handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
             handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
 
+            % save ROI
+            handles.Region(i).ROIx{f} = ROIx;
+            handles.Region(i).ROIy{f} = ROIy;
+                      
             % calculate the length and pennation for the current frame
             handles = calc_fascicle_length_and_pennation(handles,f);
- 
-            % apply mask to image
-            I = im;
-            I(mask~=1) = 0;
-
-            % detect new points
-            points = detectMinEigenFeatures(I,'FilterSize',11, 'MinQuality', 0.005);
+            
+            % detect points
+            points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
             points = points.selectStrongest(300);
             points = double(points.Location);
-
+            
             % set tracker
             setPoints(pointTracker, points);
 
         end
-
-    end
-
+        
         % save the points
         handles.points{f} = points;
+        
+    end
 
         %             profile viewer
         frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
@@ -1703,6 +1732,7 @@ for i = 1:length(handles.Region)
     end
 
 end
+
 
 close(h)
 handles.ProcessingTime(2) = toc(tstart);
@@ -1788,40 +1818,40 @@ if isfield(handles,'ImStack')
 end
 
 function[handles] = lowpass_ROI(hObject, eventdata, handles)
-i = 1;
-n = handles.vidWidth;
-
-frames = 1:handles.NumFrames;
-
-APO_TT = nan(5,length(frames));
-for f = frames
-    super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]);
-    deep_apo =  polyval(handles.geofeatures(f).deep_coef, [1 n]);
-
-    handles.Region(i).ROIy{f} = round([super_apo(1) deep_apo super_apo([2,1])])';
-    handles.Region(i).ROIx{f} = [1 1 n n 1]';
-
-    APO_TT(:,f) = handles.Region(i).ROIy{f};
-end
-
-y = nan(size(APO_TT));
-
-if ~isnan(handles.fc_lpf)
-    Wn = handles.fc_lpf / (.5 * handles.FrameRate);
-    Wn(Wn>=1) = 1-1e-6;
-    Wn(Wn<=0) = 1e-6;
-    [b,a] = butter(2, Wn);
-
-    for kk = 1:size(APO_TT,1)
-        y(kk,:) = filtfilt(b,a,APO_TT(kk,:));
-    end
-else
-    y = APO_TT;
-end
-
-for f = frames
-    handles.Region.ROIy{f} = round(y(:,f));
-end
+% i = 1;
+% n = handles.vidWidth;
+% 
+% frames = 1:handles.NumFrames;
+% 
+% APO_TT = nan(5,length(frames));
+% for f = frames
+%     super_apo = polyval(handles.geofeatures(f).super_coef, [1 n]);
+%     deep_apo =  polyval(handles.geofeatures(f).deep_coef, [1 n]);
+% 
+%     handles.Region(i).ROIy{f} = round([super_apo(1) deep_apo super_apo([2,1])])';
+%     handles.Region(i).ROIx{f} = [1 1 n n 1]';
+% 
+%     APO_TT(:,f) = handles.Region(i).ROIy{f};
+% end
+% 
+% y = nan(size(APO_TT));
+% 
+% if ~isnan(handles.fc_lpf)
+%     Wn = handles.fc_lpf / (.5 * handles.FrameRate);
+%     Wn(Wn>=1) = 1-1e-6;
+%     Wn(Wn<=0) = 1e-6;
+%     [b,a] = butter(2, Wn);
+% 
+%     for kk = 1:size(APO_TT,1)
+%         y(kk,:) = filtfilt(b,a,APO_TT(kk,:));
+%     end
+% else
+%     y = APO_TT;
+% end
+% 
+% for f = frames
+%     handles.Region.ROIy{f} = round(y(:,f));
+% end
 
 
 function[handles] = estimate_variance(hObject, eventdata, handles)
@@ -2798,3 +2828,48 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
 end
 
 
+% --- Executes on selection change in ROI_type.
+function ROI_type_Callback(hObject, eventdata, handles)
+% hObject    handle to ROI_type (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns ROI_type contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from ROI_type
+
+ROI_options =  get(hObject,'String');
+i = get(hObject, 'Value');
+
+handles.ROItype = ROI_options{i};
+
+% Run UltraTrack 
+if isfield(handles, 'Region')
+    handles = process_all_UltraTrack(hObject, eventdata, handles);
+
+    % State estimation
+    handles = do_state_estimation(hObject, eventdata, handles);
+end
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function ROI_type_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to ROI_type (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+ROI_options =  get(hObject,'String');
+i = get(hObject, 'Value');
+
+handles.ROItype = ROI_options{i};
+
+% Update handles structure
+guidata(hObject, handles);
