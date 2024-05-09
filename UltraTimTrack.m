@@ -1680,8 +1680,16 @@ for i = 1:length(handles.Region)
         if f == 1
             % detect points
             points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
-            points = points.selectStrongest(300);
+            
+            if strcmp(handles.ROItype(1:5), 'Hough')
+                points = points.selectStrongest(300);
+            end
+            
             points = double(points.Location);
+            
+            % must be in ROI
+            inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
+            points = points(inPoints,:);
             
             % define tracker
             pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
@@ -1704,7 +1712,15 @@ for i = 1:length(handles.Region)
             handles.Region(i).Fascicle(j).fas_x_original{f} =  handles.Region(i).Fascicle(j).fas_x{f};
             handles.Region(i).Fascicle(j).fas_y_original{f} =  handles.Region(i).Fascicle(j).fas_y{f};
 
-            % save ROI
+            % new roi
+            if ~strcmp(handles.ROItype(1:5), 'Hough')
+                 ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
+                 ROI_new = transformPointsForward(w, ROI_prev);
+                 ROIx = ROI_new(:,1);
+                 ROIy = ROI_new(:,2);
+            end
+                
+            % save ROI    
             handles.Region(i).ROIx{f} = ROIx;
             handles.Region(i).ROIy{f} = ROIy;
                       
@@ -1713,8 +1729,16 @@ for i = 1:length(handles.Region)
             
             % detect points
             points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
-            points = points.selectStrongest(300);
+            
+            if strcmp(handles.ROItype(1:5), 'Hough')
+                points = points.selectStrongest(300);
+            end
+            
             points = double(points.Location);
+            
+            % must be in ROI
+            inPoints = inpolygon(points(:,1),points(:,2), ROIx, ROIy);
+            points = points(inPoints,:);
             
             % set tracker
             setPoints(pointTracker, points);
