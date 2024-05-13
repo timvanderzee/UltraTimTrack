@@ -1486,6 +1486,8 @@ if isfield(handles,'ImStack')
                 if ~isempty(handles.points{f})
                     currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
                     currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
+                    
+                    currentImage = insertMarker(currentImage,[handles.apoints{f}(:,1)+d, handles.apoints{f}(:,2)], '+', 'Color','blue','size',2);
                 end
             end
 
@@ -1611,7 +1613,8 @@ for i = 1:length(handles.Region)
     im = handles.ImStack(:,:,f);
     
     % make a copy
-    I_masked = im;
+    I_fmasked = im;
+    I_amasked = im;
         
     M = ones(size(im1,1), size(im1,2), handles.parms.fas.npeaks);
 
@@ -1635,10 +1638,10 @@ for i = 1:length(handles.Region)
         end
         
         % mask
-        mask = sum(M,3);
-        mask(mask>1) = 1;
+        fmask = sum(M,3);
+        fmask(fmask>1) = 1;
 
-        I_masked(mask~=1) = 0;
+        I_fmasked(fmask~=1) = 0;
     end
     
     
@@ -1653,56 +1656,66 @@ for i = 1:length(handles.Region)
         r = .1;
         ROIy = round([super_apo(1); deep_apo; super_apo([2,1])]);
         
-        ROIy_cor = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+        ROIy_fcor = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
+        ROIy_dcor = round([deep_apo(1); deep_apo+10; deep_apo([2,1])]);
+        ROIy_scor = round([super_apo(1); super_apo-10; super_apo([2,1])]);
         
         % mask
-        mask = poly2mask(ROIx, ROIy_cor, size(im,1), size(im,2));
-        I_masked(mask~=1) = 0;
+        fmask = poly2mask(ROIx, ROIy_fcor, size(im,1), size(im,2));
+        I_fmasked(fmask~=1) = 0;
+        
+        dmask = poly2mask(ROIx, ROIy_dcor, size(im,1), size(im,2));
+        smask = poly2mask(ROIx, ROIy_scor, size(im,1), size(im,2));
+        I_amasked(dmask~=1 & smask~=1) = 0;
     end
-    
-
-%         % apply the warp to ROI
-%         ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
-%         ROI_new = transformPointsForward(w, ROI_prev);
-% 
-%         ROIx = ROI_new(:,1);
-%         ROIy = ROI_new(:,2);
-%     end
 
    
     for j = 1:length(handles.Region(i).Fascicle)
 
-
-        % only consider points inside global ROI
-%         inPoints = inpolygon(points(:,1),points(:,2), ROIx, ROIy);
-%         points = points(inPoints,:);
-
         if f == 1
             % detect points
-            points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
+            fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
+            
+            apoints = detectMinEigenFeatures(I_amasked,'FilterSize',11, 'MinQuality', 0.005);
             
             if strcmp(handles.ROItype(1:5), 'Hough')
-                points = points.selectStrongest(300);
+                fpoints = fpoints.selectStrongest(300);
             end
             
-            points = double(points.Location);
+            fpoints = double(fpoints.Location);
+            apoints = double(apoints.Location);
+             
+            % must be in ROI
+            inPoints = inpolygon(fpoints(:,1),fpoints(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
+            fpoints = fpoints(inPoints,:);
             
             % must be in ROI
-            inPoints = inpolygon(points(:,1),points(:,2), handles.Region(i).ROIx{f}, handles.Region(i).ROIy{f});
-            points = points(inPoints,:);
+             n = handles.vidWidth;
+             m = handles.vidHeight;
+            inPoints = inpolygon(apoints(:,1),apoints(:,2), [1 n n 1 1], [1 1 m m 1]);
+            apoints = apoints(inPoints,:);
             
             % define tracker
-            pointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
-            initialize(pointTracker,points,im);
+            fpointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
+            initialize(fpointTracker,fpoints,im);
+            
+            % define tracker
+            apointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
+            initialize(apointTracker,apoints,im);
         else
             % Compute the flow and new roi
-            [pointsNew, isFound] = step(pointTracker, im);
-            [w,~] = estimateGeometricTransform2D(points(isFound,:), pointsNew(isFound,:), 'affine', 'MaxDistance',50);
-            handles.Region(i).warp(:,:,f-1) = w;
+            [fpointsNew, isFound] = step(fpointTracker, im);
+            [wf,~] = estimateGeometricTransform2D(fpoints(isFound,:), fpointsNew(isFound,:), 'affine', 'MaxDistance',50);
+            handles.Region(i).warp(:,:,f-1) = wf;
+            
+             % Compute the flow and new roi
+            [apointsNew, isFound] = step(apointTracker, im);
+            [wa,~] = estimateGeometricTransform2D(apoints(isFound,:), apointsNew(isFound,:), 'affine', 'MaxDistance',50);
+%             handles.Region(i).warp(:,:,f-1) = wf;
 
             % apply the warp to fascicles
             fas_prev = [handles.Region(i).Fascicle(j).fas_x{f-1}' handles.Region(i).Fascicle(j).fas_y{f-1}'];
-            fas_new = transformPointsForward(w, fas_prev);
+            fas_new = transformPointsForward(wf, fas_prev);
             
             % save
             handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1)';
@@ -1715,7 +1728,7 @@ for i = 1:length(handles.Region)
             % new roi
             if ~strcmp(handles.ROItype(1:5), 'Hough')
                  ROI_prev = [handles.Region(i).ROIx{f-1} handles.Region(i).ROIy{f-1}];
-                 ROI_new = transformPointsForward(w, ROI_prev);
+                 ROI_new = transformPointsForward(wa, ROI_prev);
                  ROIx = ROI_new(:,1);
                  ROIy = ROI_new(:,2);
             end
@@ -1728,25 +1741,42 @@ for i = 1:length(handles.Region)
             handles = calc_fascicle_length_and_pennation(handles,f);
             
             % detect points
-            points = detectMinEigenFeatures(I_masked,'FilterSize',11, 'MinQuality', 0.005);
+            fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
             
             if strcmp(handles.ROItype(1:5), 'Hough')
-                points = points.selectStrongest(300);
+                fpoints = fpoints.selectStrongest(300);
             end
             
-            points = double(points.Location);
+            fpoints = double(fpoints.Location);
             
             % must be in ROI
-            inPoints = inpolygon(points(:,1),points(:,2), ROIx, ROIy);
-            points = points(inPoints,:);
+            inPoints = inpolygon(fpoints(:,1),fpoints(:,2), ROIx, ROIy);
+            fpoints = fpoints(inPoints,:);
             
             % set tracker
-            setPoints(pointTracker, points);
+            setPoints(fpointTracker, fpoints);
 
+            % detect points
+            apoints = detectMinEigenFeatures(I_amasked,'FilterSize',11, 'MinQuality', 0.005);
+            
+            if strcmp(handles.ROItype(1:5), 'Hough')
+                apoints = apoints.selectStrongest(300);
+            end
+            
+            apoints = double(apoints.Location);
+            
+            % must be in ROI
+            inPoints = inpolygon(apoints(:,1),apoints(:,2), [1 n n 1 1], [1 1 m m 1]);
+            apoints = apoints(inPoints,:);
+            
+            % set tracker
+            setPoints(apointTracker, apoints);
+            
         end
         
         % save the points
-        handles.points{f} = points;
+        handles.points{f} = fpoints;
+        handles.apoints{f} = apoints;
         
     end
 
