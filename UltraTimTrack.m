@@ -1005,6 +1005,13 @@ if isfield(handles,'ImStack')
         currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
             handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
         
+        % add aponeurosis
+        currentImage = insertShape(currentImage,'line',[handles.Region(i).sup_x{f}(1)+d, handles.Region(i).sup_y{f}(1), ...
+        handles.Region(i).sup_x{f}(2)+d,handles.Region(i).sup_y{f}(2)], 'LineWidth',5, 'Color','blue');
+
+        currentImage = insertShape(currentImage,'line',[handles.Region(i).deep_x{f}(1)+d, handles.Region(i).deep_y{f}(1), ...
+        handles.Region(i).deep_x{f}(2)+d,handles.Region(i).deep_y{f}(2)], 'LineWidth',5, 'Color','green');
+
         % add features points
         if isfield(handles,'points')
             if ~isempty(handles.points{f})
@@ -1186,39 +1193,39 @@ if isfield(handles,'Region')
     end
 end
 
-% filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
-% save(filename,'TrackingData','Fdat');
+filename = [handles.pname, handles.fname(1:end-4), '_tracked_Q=',strrep(num2str(handles.Q),'.','')];
+save(filename,'TrackingData','Fdat');
 
-[~,handles.file,handles.ext] = fileparts(handles.fname);
-fileout_suggest = [handles.pname handles.file '.mat'];
-[fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
-cd(pathout);
-
-if exist([pathout fileout], 'file') == 2
-
-    if exist('Data','var') && exist('Fdat','var')
-        save(fileout,'-append','Fdat','Data','TrackingData')
-    elseif exist('Fdat','var')
-        save(fileout,'-append','Fdat','TrackingData')
-    elseif exist('Data','var')
-        save(fileout,'-append','Data')
-    else
-        warndlg('There was no data to save', 'WARNING!')
-    end
-
-else
-
-    if exist('Data','var') && exist('Fdat','var')
-        save(fileout,'Fdat','Data','TrackingData')
-    elseif exist('Fdat','var')
-        save(fileout,'Fdat','TrackingData')
-    elseif exist('Data','var')
-        save(fileout,'Data')
-    else
-        warndlg('There was no data to save', 'WARNING!')
-    end
-
-end
+% [~,handles.file,handles.ext] = fileparts(handles.fname);
+% fileout_suggest = [handles.pname handles.file '.mat'];
+% [fileout, pathout] = uiputfile(fileout_suggest,'Save fascicle data as...');
+% cd(pathout);
+% 
+% if exist([pathout fileout], 'file') == 2
+% 
+%     if exist('Data','var') && exist('Fdat','var')
+%         save(fileout,'-append','Fdat','Data','TrackingData')
+%     elseif exist('Fdat','var')
+%         save(fileout,'-append','Fdat','TrackingData')
+%     elseif exist('Data','var')
+%         save(fileout,'-append','Data')
+%     else
+%         warndlg('There was no data to save', 'WARNING!')
+%     end
+% 
+% else
+% 
+%     if exist('Data','var') && exist('Fdat','var')
+%         save(fileout,'Fdat','Data','TrackingData')
+%     elseif exist('Fdat','var')
+%         save(fileout,'Fdat','TrackingData')
+%     elseif exist('Data','var')
+%         save(fileout,'Data')
+%     else
+%         warndlg('There was no data to save', 'WARNING!')
+%     end
+% 
+% end
 
 
 % --- Executes on key press with focus on figure1 and none of its controls.
@@ -1491,10 +1498,15 @@ if isfield(handles,'ImStack')
             
             if isfield(handles,'points')
                 if ~isempty(handles.points{f})
+                    
+                    v_points = handles.apoints{f}(:,2);
+                    id = v_points < (handles.parms.apo.deep.cut(1) * handles.vidHeight);
+                                        
                     currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
                     currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
                     
-                    currentImage = insertMarker(currentImage,[handles.apoints{f}(:,1)+d, handles.apoints{f}(:,2)], '+', 'Color','blue','size',2);
+                    currentImage = insertMarker(currentImage,[handles.apoints{f}(id,1)+d, handles.apoints{f}(id,2)], '+', 'Color','blue','size',2);
+                    currentImage = insertMarker(currentImage,[handles.apoints{f}(~id,1)+d, handles.apoints{f}(~id,2)], '+', 'Color','green','size',2);
                 end
             end
 
@@ -1614,9 +1626,11 @@ for i = 1:length(handles.Region)
     % extract image
     im = handles.ImStack(:,:,f);
     
+%     profile on
     % make a copy
     I_fmasked = im;
-    I_amasked = im;
+    I_dmasked = im;
+    I_smasked = im;
         
     M = ones(size(im1,1), size(im1,2), handles.parms.fas.npeaks);
 
@@ -1656,14 +1670,23 @@ for i = 1:length(handles.Region)
         thickness = deep_apo - super_apo;
 
         r = .1;
-%         ROIy = round([super_apo(1); deep_apo; super_apo([2,1])]);
+        ROIy = round([super_apo(1); deep_apo; super_apo([2,1])]);
         
         ROIy_fcor = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
         
         % mask
         fmask = poly2mask(ROIx, ROIy_fcor, size(im,1), size(im,2));
         I_fmasked(fmask~=1) = 0;
+
+        d = [5 10];
+        ROIyd = [ROIy(2)-d(1); ROIy(2)+d(2); ROIy(3)+d(2); ROIy(3)-d(1); ROIy(2)-d(1)];
+        ROIys = [ROIy(1)+d(1); ROIy(1)-d(2); ROIy(4)-d(2); ROIy(4)+d(1); ROIy(1)+d(1)];
         
+        dmask =  poly2mask(ROIx, ROIyd, size(im,1), size(im,2));
+        smask =  poly2mask(ROIx, ROIys, size(im,1), size(im,2));
+        
+        I_smasked(smask~=1) = 0;
+        I_dmasked(dmask~=1) = 0;
     end
 
    
@@ -1672,15 +1695,18 @@ for i = 1:length(handles.Region)
         if f == 1
             % detect points
             fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
-            apoints = detectMinEigenFeatures(I_amasked,'FilterSize',11, 'MinQuality', 0.005);
+            spoints = detectMinEigenFeatures(I_smasked,'FilterSize',11, 'MinQuality', 0.005);
+            dpoints = detectMinEigenFeatures(I_dmasked,'FilterSize',11, 'MinQuality', 0.005);
             
             if strcmp(handles.ROItype(1:5), 'Hough')
                 fpoints = fpoints.selectStrongest(300);
-%                 apoints = apoints.selectStrongest(50);
+                spoints = spoints.selectStrongest(150);
+                dpoints = dpoints.selectStrongest(150);
             end
             
             fpoints = double(fpoints.Location);
-            apoints = double(apoints.Location);
+            dpoints = double(dpoints.Location);
+            spoints = double(spoints.Location);
              
             % must be in ROI
             ROIy = handles.Region(i).ROIy{f};
@@ -1688,15 +1714,7 @@ for i = 1:length(handles.Region)
             inPoints = inpolygon(fpoints(:,1), fpoints(:,2), ROIx, ROIy);
             fpoints = fpoints(inPoints,:);
             
-            d = 20;
-            ROIyd = [ROIy(2); ROIy(2)+d; ROIy(3)+d; ROIy(3); ROIy(2)];
-            ROIya = [ROIy(1); ROIy(1)-d; ROIy(4)-d; ROIy(4); ROIy(1)];
-            
-            % must be in ROI
-            dinPoints = inpolygon(apoints(:,1), apoints(:,2), ROIx, ROIyd);
-            ainPoints = inpolygon(apoints(:,1), apoints(:,2), ROIx, ROIya);
-            
-            apoints = apoints(dinPoints | ainPoints,:);
+            apoints = [spoints; dpoints];
             
             % define tracker
             fpointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
@@ -1705,7 +1723,9 @@ for i = 1:length(handles.Region)
             % define tracker
             apointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
             initialize(apointTracker,apoints,im);
+%             profile viewer
         else
+%             profile on
             % Compute the flow and new roi
             [fpointsNew, isFound] = step(fpointTracker, im);
             [wf,~] = estimateGeometricTransform2D(fpoints(isFound,:), fpointsNew(isFound,:), 'affine', 'MaxDistance',50);
@@ -1748,6 +1768,7 @@ for i = 1:length(handles.Region)
                 deep_apo = handles.geofeatures(f).deep_pos';
 
                 ROIy = [super_apo(1); deep_apo; super_apo([2,1])]; 
+                ROIy_fcor = round([super_apo(1)+thickness(1)*r; deep_apo-thickness*r; super_apo([2,1])+thickness([2,1])*r]);
             else
                  ROIx = [super_new(1,1); deep_new(:,1); super_new([2,1],1)]; 
                  ROIy = [super_new(1,2); deep_new(:,2); super_new([2,1],2)]; 
@@ -1761,44 +1782,68 @@ for i = 1:length(handles.Region)
             % calculate the length and pennation for the current frame
             handles = calc_fascicle_length_and_pennation(handles,f);
             
-            % detect points
-            fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
+            % update the points
+            fpoints = fpointsNew;
             
-            if strcmp(handles.ROItype(1:5), 'Hough')
-                fpoints = fpoints.selectStrongest(300);
+            % if drops below 100, define new points
+            if length(fpoints) < 100
+                
+                % detect points
+                fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
+
+                if strcmp(handles.ROItype(1:5), 'Hough')
+                    fpoints = fpoints.selectStrongest(300);
+                end
+
+                fpoints = double(fpoints.Location);
             end
             
-            fpoints = double(fpoints.Location);
-            
             % must be in ROI
-            inPoints = inpolygon(fpoints(:,1),fpoints(:,2), ROIx, ROIy);
+            if strcmp(handles.ROItype(1:5), 'Hough')
+                inPoints = inpolygon(fpoints(:,1),fpoints(:,2), ROIx, ROIy_fcor);
+            else
+                inPoints = inpolygon(fpoints(:,1),fpoints(:,2), ROIx, ROIy);
+            end
+            
             fpoints = fpoints(inPoints,:);
             
             % set tracker
             setPoints(fpointTracker, fpoints);
 
+            % update the points
+            apoints = apointsNew;
+            
+            % split superficial and deep
+            spoints = apoints(apoints(:,2) < (handles.parms.apo.super.cut(2) * handles.vidHeight),:);
+            dpoints = apoints(apoints(:,2) > (handles.parms.apo.deep.cut(1) * handles.vidHeight),:);
+            
             % detect points
-            apoints = detectMinEigenFeatures(I_amasked,'FilterSize',11, 'MinQuality', 0.005);
+             if length(spoints) < 50
+                spoints = detectMinEigenFeatures(I_smasked,'FilterSize',11, 'MinQuality', 0.005);
+                spoints = spoints.selectStrongest(150);
+                spoints = double(spoints.Location);
+             end
+             
+             if length(dpoints) < 50
+                dpoints = detectMinEigenFeatures(I_dmasked,'FilterSize',11, 'MinQuality', 0.005);
+                dpoints = dpoints.selectStrongest(150);
+                dpoints = double(dpoints.Location);
+             end
             
-%             if strcmp(handles.ROItype(1:5), 'Hough')
-%                 apoints = apoints.selectStrongest(50);
-%             end
-            
-            apoints = double(apoints.Location);
-            
-            d = 20;
-            ROIyd = [ROIy(2); ROIy(2)+d; ROIy(3)+d; ROIy(3); ROIy(2)];
-            ROIya = [ROIy(1); ROIy(1)-d; ROIy(4)-d; ROIy(4); ROIy(1)];
+            apoints = [spoints; dpoints];
+             
+            ROIyd = [ROIy(2)-d(1); ROIy(2)+d(2); ROIy(3)+d(2); ROIy(3)-d(1); ROIy(2)-d(1)];
+            ROIys = [ROIy(1)+d(1); ROIy(1)-d(2); ROIy(4)-d(2); ROIy(4)+d(1); ROIy(1)+d(1)];
             
             % must be in ROI
             dinPoints = inpolygon(apoints(:,1),apoints(:,2), ROIx, ROIyd);
-            ainPoints = inpolygon(apoints(:,1),apoints(:,2), ROIx, ROIya);
+            ainPoints = inpolygon(apoints(:,1),apoints(:,2), ROIx, ROIys);
             
             apoints = apoints(dinPoints | ainPoints,:);
                        
             % set tracker
             setPoints(apointTracker, apoints);
-            
+%             profile viewer
         end
         
         % save the points
@@ -2297,7 +2342,6 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-
 w = handles.vidWidth;
 
 if ~isvalid(handles.S)
@@ -2336,7 +2380,10 @@ data = imresize(handles.ImStack(:,:,frame_no+handles.start_frame-1), 1/handles.i
 % end
 
 % run TimTrack
-geofeatures = auto_ultrasound(data, handles.parms);
+[geofeatures, ~, parms] = auto_ultrasound(data, handles.parms);
+
+% save parms
+handles.parms = parms;
 
 % scale
 geofeatures.thickness = geofeatures.thickness * handles.imresize_fac;
@@ -2591,7 +2638,17 @@ function Process_folder_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-dir_data = uigetdir(cd,'Select folder with video(s)');
+% dir_data = uigetdir(cd,'Select folder with video(s)');
+
+mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing';
+cd(mainfolder)
+files = dir;
+dirFlags = [files.isdir];
+% Extract only those that are directories.
+subFolders = files(dirFlags); % A structure with extra info.zf
+
+for j = 1:(length(subFolders.name)-2)
+    dir_data = [mainfolder, '\',subFolders(j+1).name];
 if dir_data == 0 %no folder selected, just return
     return
 end
@@ -2726,25 +2783,25 @@ for k = 1:numel(files) %foreach file
         mkdir([handles.pname 'Tracked/'])
     end
     handles.pname = [handles.pname 'Tracked/'];
+    
+    Qs = [0, 10.^(-4:0), 1000, inf];
 
-    for kk = 1:2 %
-        Qs = [0, 10.^(-4:0), 1000, inf];
+    % process
+    handles = process_all_Callback(hObject, eventdata, handles);
 
-        % process
-        handles = process_all_Callback(hObject, eventdata, handles);
+    for i = 1:length(Qs)
+        handles.Q = Qs(i);
 
-        for i = 1:length(Qs)
-            handles.Q = Qs(i);
+        handles = do_state_estimation(hObject, eventdata, handles);
 
-            handles = do_state_estimation(hObject, eventdata, handles);
+        % save
+        save_video_Callback(hObject, eventdata, handles)
+        Save_As_Mat_Callback(hObject, eventdata, handles)
 
-            % save
-            save_video_Callback(hObject, eventdata, handles)
-            Save_As_Mat_Callback(hObject, eventdata, handles)
-
-        end
     end
 end
+end
+
 
 function freq_lpf_Callback(hObject, eventdata, handles)
 % hObject    handle to freq_lpf (see GCBO)
