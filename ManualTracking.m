@@ -17,11 +17,12 @@ FasData.FAngle = [];
 FasData.pts = {};
 FasData.digitizedFrames = [];
 
+
 for n_file = 1:numel(fname)
     vidObj = VideoReader([path fname{n_file}]);
     n_fr = 1;
     % Create a random array of integers for the frames to track manually
-    rnd_fr = randperm(vidObj.NumFrames, ceil(vidObj.NumFrames / 60));
+    rnd_fr = randperm(vidObj.NumFrames, ceil(vidObj.NumFrames / 10)); %digitez n_frames / 10
     ZeroPadL = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');
     ZeroPadR = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');
 
