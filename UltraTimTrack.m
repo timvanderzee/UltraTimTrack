@@ -1638,10 +1638,10 @@ end
 % Run UltraTrack (note: includes state estimation on ROI)
 handles = process_all_UltraTrack(hObject, eventdata, handles);
 
-if strcmp(handles.ROItype(1:5), 'Hough')
-% State estimation
-handles = do_state_estimation(hObject, eventdata, handles);
-end
+% if strcmp(handles.ROItype(1:5), 'Hough')
+% % State estimation
+% handles = do_state_estimation(hObject, eventdata, handles);
+% end
 
 % update the image axes using show_image function (bottom)
 show_data(hObject, handles);
@@ -1734,7 +1734,7 @@ for i = 1:length(handles.Region)
             fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);           
             
             if strcmp(handles.ROItype(1:5), 'Hough')
-%                 fpoints = fpoints.selectStrongest(300);
+                fpoints = fpoints.selectStrongest(300);
             end
             
             % get location
@@ -1836,13 +1836,13 @@ for i = 1:length(handles.Region)
             fpoints = fpointsNew;
             
             % if drops below 100, define new points
-            if length(fpoints) < 2000 || ~strcmp(handles.ROItype(1:5), 'Hough')
+            if length(fpoints) < 100 || ~strcmp(handles.ROItype(1:5), 'Hough')
                 
                 % detect points
                 fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);
 
                 if strcmp(handles.ROItype(1:5), 'Hough')
-%                     fpoints = fpoints.selectStrongest(300);
+                    fpoints = fpoints.selectStrongest(300);
                 end
 
                 fpoints = double(fpoints.Location);
@@ -2009,7 +2009,7 @@ end
 Wn = 1.5*handles.fc_lpf / (.5 * handles.FrameRate);
 Wn(Wn>=1) = 1-1e-6;
 Wn(Wn<=0) = 1e-6;
-[b,a] = butter(10, Wn, 'high');
+[b,a] = butter(2, Wn, 'high');
 
 y = nan(size(x));
 for i = 1:size(x,2)
@@ -2047,14 +2047,14 @@ if ~isnan(handles.Q)
         end
     end
 
-%     % Rauch-Tung-Striebel backwards filter
-%     for f = (get(handles.frame_slider,'Max')-1):-1:1
-%         for i = 1:length(handles.Region)
-%             for j = 1:length(handles.Region(i).Fascicle)
-%                 handles = state_smoothener(handles,f,f+1);
-%             end
-%         end
-%     end
+    % Rauch-Tung-Striebel backwards filter
+    for f = (get(handles.frame_slider,'Max')-1):-1:1
+        for i = 1:length(handles.Region)
+            for j = 1:length(handles.Region(i).Fascicle)
+                handles = state_smoothener(handles,f,f+1);
+            end
+        end
+    end
 % % 
     show_image(hObject,handles);
     show_data(hObject, handles);
@@ -2468,7 +2468,7 @@ data = imresize(handles.ImStack(:,:,frame_no+handles.start_frame-1), 1/handles.i
 %     parms.fas.range = [5 80] + 90;
 % end
 
-handles.parms.fas.range = [5 30];
+% handles.parms.fas.range = [5 30];
 
 % run TimTrack
 [geofeatures, ~, parms] = auto_ultrasound(data, handles.parms);
@@ -2741,8 +2741,8 @@ dirFlags = [files.isdir];
 % Extract only those that are directories.
 subFolders = files(dirFlags); % A structure with extra info.zf
 
-for j = 1:(length(subFolders)-8)
-    dir_data = [mainfolder, '\',subFolders(8+2).name];
+for j = 2:(length(subFolders)-2)
+    dir_data = [mainfolder, '\',subFolders(j+2).name];
 if dir_data == 0 %no folder selected, just return
     return
 end
@@ -2776,7 +2776,7 @@ files(ind_toRemove) = []; %keep videos
 %     files = dir('*.mp4');
 %
 
-for k = 1:numel(files) %foreach file
+for k = [2,4,6, length(files)] %1:numel(files) %foreach file
 
     handles.fname = files(k).name;
     handles.pname = [files(k).folder,'/'];
