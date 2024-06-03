@@ -29,14 +29,15 @@ for n_file = 1:numel(fname)
     step = (vidObj.NumFrames/100);
     frames_to_track = 1: step : vidObj.NumFrames;
     % Create a random array of integers for the frames to track manually
-    rnd_fr = randperm(length(frames_to_track)); %digitez n_frames / 10
+    %rnd_fr = randperm(length(frames_to_track)); %digitez n_frames / 10
+    frames_to_track = frames_to_track(randperm(length(frames_to_track))); %randomize array
 
     ZeroPadL = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');
     ZeroPadR = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');
 
-    for ii = 1:numel(rnd_fr)
+    for ii = 1:numel(frames_to_track)
         % Read the frame
-        frameImg = rgb2gray(read(vidObj, rnd_fr(ii)));
+        frameImg = rgb2gray(read(vidObj, frames_to_track(ii)));
         currentImage = [ZeroPadL, frameImg, ZeroPadR];
 
         imshow(currentImage);
@@ -50,7 +51,7 @@ for n_file = 1:numel(fname)
         data.apo = apo;
         data.ApoData = ApoData;
 
-        data.currentFrame = rnd_fr(ii); % Store the current frame
+        data.currentFrame = frames_to_track(ii); % Store the current frame
 
 
         guidata(hFig, data);
