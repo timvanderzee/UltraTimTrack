@@ -26,8 +26,8 @@ for n_file = 1:numel(fname)
     vidObj = VideoReader([path fname{n_file}]);
     %n_fr = 1;
 
-    step = (vidObj.NumFrames/100);
-    frames_to_track = 1: step : vidObj.NumFrames;
+    step = 6; %round(vidObj.NumFrames/100);
+    frames_to_track = ceil(1: step : vidObj.NumFrames);
     % Create a random array of integers for the frames to track manually
     %rnd_fr = randperm(length(frames_to_track)); %digitez n_frames / 10
     frames_to_track = frames_to_track(randperm(length(frames_to_track))); %randomize array
