@@ -30,7 +30,7 @@ for n_file = 1:numel(fname)
     frames_to_track = ceil(1: step : vidObj.NumFrames);
     % Create a random array of integers for the frames to track manually
     %rnd_fr = randperm(length(frames_to_track)); %digitez n_frames / 10
-    frames_to_track = frames_to_track(randperm(length(frames_to_track))); %randomize array
+    %frames_to_track = frames_to_track(randperm(length(frames_to_track))); %randomize array
 
     ZeroPadL = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');
     ZeroPadR = 200 * ones(vidObj.Height, vidObj.Width, 'uint8');

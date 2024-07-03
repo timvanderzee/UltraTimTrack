@@ -1323,6 +1323,7 @@ handles.start_frame = TrackingData.start_frame;
 handles.NumFrames = TrackingData.NumFrames;
 handles.S = TrackingData.S;
 handles.D = TrackingData.D;
+handles.geofeatures = Fdat.geofeatures;
 set(handles.frame_slider,'Min',1);
 set(handles.frame_slider,'Max',handles.NumFrames);
 set(handles.frame_slider,'Value',1);
@@ -1331,6 +1332,8 @@ set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 5/handles.NumFrames])
 set(handles.frame_number,'String',1);
 
 show_image(hObject,handles);
+ show_data(hObject, handles); %update plots
+
 
 % --- Executes on button press in zoominvideo.
 function zoominvideo_Callback(hObject, eventdata, handles)
@@ -1631,17 +1634,17 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 handles = Auto_Detect_Callback(hObject, eventdata, handles);
 
 % Run TimTrack
-if strcmp(handles.ROItype(1:5), 'Hough')
+if contains(handles.ROItype, 'Hough')
     handles = process_all_TimTrack(hObject, eventdata, handles);
 end
 
 % Run UltraTrack (note: includes state estimation on ROI)
 handles = process_all_UltraTrack(hObject, eventdata, handles);
 
-% if strcmp(handles.ROItype(1:5), 'Hough')
-% % State estimation
-% handles = do_state_estimation(hObject, eventdata, handles);
-% end
+if contains(handles.ROItype, 'Hough')
+    % % State estimation
+    handles = do_state_estimation(hObject, eventdata, handles);
+end
 
 % update the image axes using show_image function (bottom)
 show_data(hObject, handles);
@@ -1694,7 +1697,7 @@ for i = 1:length(handles.Region)
     
     
     % get current ROI
-    if strcmp(handles.ROItype(1:5), 'Hough')
+    if contains(handles.ROItype, 'Hough')
         I_amasked = im;
             
         n = handles.vidWidth;
@@ -1733,7 +1736,7 @@ for i = 1:length(handles.Region)
             % detect points
             fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);           
             
-            if strcmp(handles.ROItype(1:5), 'Hough')
+            if contains(handles.ROItype, 'Hough')
                 fpoints = fpoints.selectStrongest(300);
             end
             
@@ -1750,7 +1753,7 @@ for i = 1:length(handles.Region)
             fpointTracker = vision.PointTracker('NumPyramidLevels',4,'MaxIterations',50,'MaxBidirectionalError',inf,'BlockSize',handles.BlockSize);
             initialize(fpointTracker,fpoints,im);
             
-            if strcmp(handles.ROItype(1:5), 'Hough')
+            if contains(handles.ROItype, 'Hough')
                 % define aponeurosis tracker
                 apoints = detectMinEigenFeatures(I_amasked,'FilterSize',11, 'MinQuality', 0.005);
                 apoints =  double(apoints.Location);
@@ -1764,7 +1767,7 @@ for i = 1:length(handles.Region)
             [wf,~] = estimateGeometricTransform2D(fpoints(isFound,:), fpointsNew(isFound,:), 'affine', 'MaxDistance',50);
             handles.Region(i).warp(:,:,f-1) = wf;
             
-            if strcmp(handles.ROItype(1:5), 'Hough')
+            if contains(handles.ROItype, 'Hough')
                  % Compute the flow and new roi
                 [apointsNew, isFound] = step(apointTracker, im);
                 [wa,~] = estimateGeometricTransform2D(apoints(isFound,:), apointsNew(isFound,:), 'affine', 'MaxDistance',50);
@@ -1784,7 +1787,7 @@ for i = 1:length(handles.Region)
             handles.Region(i).Fascicle(j).fas_y_original{f} = handles.Region(i).Fascicle(j).fas_y{f};
 
             % in the new version, aponeurosis has its own warp (in the old version it doesnt)
-            if strcmp(handles.ROItype(1:5), 'Hough')
+            if contains(handles.ROItype, 'Hough')
 
                 % apply warp to aponeurosis
                 super_prev = [handles.Region(i).sup_x{f-1} handles.Region(i).sup_y{f-1}];
@@ -1980,10 +1983,12 @@ if isfield(handles,'ImStack')
             geofeatures(kk).super_coef(2)   = geofeatures(kk).super_coef(2) * handles.imresize_fac;
             geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
             geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
-            
+            geofeatures(kk).faslen          = geofeatures(kk).faslen * handles.imresize_fac;
+
             % get vertical locations at image boundaries
             geofeatures(kk).super_pos = polyval(geofeatures(kk).super_coef, [1 n]);
             geofeatures(kk).deep_pos = polyval(geofeatures(kk).deep_coef, [1 n]);
+
         end
 
         handles.geofeatures = geofeatures;
