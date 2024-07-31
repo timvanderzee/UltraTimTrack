@@ -1,2 +1,40 @@
-# Muscle_Tracking
-Updated version of UltraTrack with KLT alg
+# UltraTimTrack fascicle tracking algorithm
+The simplest way to download UltraTimTrack is to clone the required Github repositories within Matlab. For details on how to use Git in Matlab, please refer to this link: https://de.mathworks.com/help/matlab/matlab_prog/use-git-in-matlab.html. 
+
+Once you are ready to use Git in Matlab, please follow these steps. 
+
+Within Matlab:
+1.	Navigate to the path you would like to clone the UltraTimTrack repository to 
+2.	Run the following line of code:
+   
+!git clone https://github.com/timvanderzee/UltraTimTrack.git
+
+4.	Navigate to the UltraTimTrack folder 
+5.	Run the following line of code:
+   
+!git clone https://github.com/timvanderzee/ultrasound-automated-algorithm.git
+
+These steps should download the required repositories for UltraTimTrack to run successfully. However, also ensure that UltraTimTrack and its subfolders are added to the Matlab path before running UltraTimTrack.m, which is located in the main UltraTimTrack folder.
+
+To load UltraTimTrack’s graphical user interface (GUI), do the following within Matlab:
+
+•	Either open UltraTimTrack.m and go to the Editor tab and click "Run", or simply type in "UltraTimTrack" into the command window
+
+To track a video, you need to use UltraTimTrack’s GUI and follow these steps:
+1.	Load a desired image sequence by either clicking "File" then "Open video file" or by typing "Cntrl+N", then choose the image sequence that should be tracked
+2.	For TimTrack to correctly define the superficial (upper) and deep (lower) aponeuroses around the fascicles of interest, it might be necessary to change the location and size of one or both boxes around the superficial or deep aponeuroses by clicking and dragging on the box or its corner, respectively. Ensure that only one aponeurosis sits in the middle of the designated box (note: blue = superficial aponeurosis; green = deep aponeurosis) and ensure that this aponeurosis does not move outside the box during the image sequence, and ideally that another aponeurosis does not enter the box during the image sequence
+3.	It is recommended that the default values in the "Settings" column are not manually changed the first time that the GUI is run, unless the image depth is obviously wrong
+4.	To define one fascicle and the aponeuroses within the user-defined blue and green boxes, click "Define fascicle". If the fascicle is defined incorrectly because the most superficial (i.e. upper) part of the fascicle is towards the left of the image, then click "Clear", click the checkbox "Flip image" under “Optional” settings, and then click "Define fascicle" again
+5.	Once the user agrees with the fascicle and aponeuroses that are defined, this fascicle can be tracked by clicking "Process all”.
+6.	The user will then be prompted to run parallel processing to speed up TimTrack, which can be opted for with "Yes", or skipped with "No". Clicking cancel may cause the GUI to stop running due to an error, so if this occurs then repeat step 5 and subsequently click "Yes" or "No". To run parallel processing without being prompted, simply click the checkbox next to "Parallel processing" under “Optional” settings before clicking "Process all".
+7.	After TimTrack, UltraTrack, and UltraTimTrack have finished processing, which is indicated by the absence of a wait bar, and provided that there is no error message within Matlab’s command window, the GUI will plot the fascicle lengths and fascicle angles estimated from each image of the image sequence. To check the fascicle tracking at a given frame, either the slider below the currently-displayed image can be dragged to the desired image number or the desired image number can be typed directly into the white box next to the slider. However, the best way to visually inspect the fascicle tracking is to navigate to the first image and then to click the play ">" button, which will show each ultrasound image from the entire image sequence with the tracked fascicle and aponeuroses overlaid 
+8.	Following steps 5-7, it is recommended the "Process noise covariance parameter" is manually changed and the fascicle tracking reinspected by repeating step 7. Decreasing the value towards 0 will favour UltraTrack's outputs, whereas increasing the value towards infinity will favour TimTrack's outputs.  Ensure that enter is pressed after the desired value is typed into this box
+9.	Following steps 5-8, other parameters can also be manually changed, including the value for the "Cut-off frequency" and the value for the "Measurement noise covariance x-coordinate sup. attachment"  (see manuscript). If these values are changed, the user should first inspect the fascicle length and angle plots, and if there are substantial deviations from a previous plot, then step 7 should be repeated 
+10.	The feature points used for optical flow estimation by UltraTrack can also be changed by changing the ROI type from “Hough – local” to either “Hough – global” (see manuscript).  
+
+## Additional information
+
+Fascicle definition: Changing the "# stationary frames" value will affect how the fascicle and aponeuroses on the first frame are defined and it is recommended that each image sequence has a steady-state passive or active force with no muscle length change for the number of frames that is input. If the muscle constantly changes length due to changes in passive or active force, then this value should be left at 1. 
+
+Image sequence cropping: If the user would like to start tracking at a different part of the image sequence (note that only forward tracking is currently supported), then simply select the image that should be tracked first by using the slider or by typing the image number directly into the box next to the slider. Then click the top left button in the “Control panel” settings "Cut before". This will result in images before the currently-selected image not being tracked and the fascicle and aponeuroses will be defined for this image first and then tracked forwards after “Process all” is clicked (i.e. step 5). Images at the end of the image sequence can be omitted from tracking by going to the last image of interest and then clicking the top right button in the “Control panel” settings "Cut after". It is recommended that "Cut before" and "Cut after" are only clicked once or the GUI might not be able to save the tracked data. If either button is clicked more than once, then it is then recommended that the image sequence is reloaded (i.e. step 1) before it is cropped again. 
+
