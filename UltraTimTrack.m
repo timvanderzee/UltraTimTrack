@@ -1013,12 +1013,12 @@ if isfield(handles,'ImStack')
         handles.Region(i).deep_x{f}(2)+d,handles.Region(i).deep_y{f}(2)], 'LineWidth',5, 'Color','green');
 
         % add features points
-        if isfield(handles,'points')
-            if ~isempty(handles.points{f})
-                currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
-                currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
-            end
-        end
+%         if isfield(handles,'points')
+%             if ~isempty(handles.points{f})
+%                 currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
+%                 currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
+%             end
+%         end
             
         % add ROI
         currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
@@ -1187,6 +1187,7 @@ if isfield(handles,'Region')
             Fdat.Region(i) = handles.Region(i);
             Fdat.Region(i).FL = handles.Region(i).fas_length(nz,:)';
             Fdat.Region(i).PEN = handles.Region(i).fas_pen(nz,:)';
+            Fdat.Region(i).ANG = handles.Region(i).fas_ang(nz,:)';
             Fdat.Region(i).Time = time(nz);
         end
     end
@@ -2415,6 +2416,7 @@ gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 %if length(handles.Region(i).Fascicle(j).alpha) >= frame_no
 if isfield(handles.Region(i).Fascicle(j),'alpha') && length(handles.Region(i).Fascicle(j).alpha) >= frame_no && ~isempty(handles.Region(i).Fascicle(j).alpha{frame_no}) 
     handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no} - gamma;
+    handles.Region(i).fas_ang(frame_no,j) = handles.Region(i).Fascicle(j).alpha{frame_no};
 else
     handles.Region(i).fas_pen(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
 end
@@ -2603,6 +2605,8 @@ if isfield(handles,"Region")
         for j = 1:numel(handles.Region(i).Fascicle)
             handles.Region(i).Fascicle(j).fas_x = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x, 'UniformOutput', false);
             handles.Region(i).Fascicle(j).fas_y = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y, 'UniformOutput', false);
+            handles.Region(i).Fascicle(j).fas_x_end = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x_end, 'UniformOutput', false);
+            handles.Region(i).Fascicle(j).fas_y_end = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y_end, 'UniformOutput', false);
         end
     end
 
@@ -3016,7 +3020,7 @@ function Qvalue_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of Qvalue as text
 %        str2double(get(hObject,'String')) returns contents of Qvalue as a double
 
-handles.Q = str2double(get(hObject,'String'));
+handles.Q = abs(str2double(get(hObject,'String')));
 
 % If we have estimates ALL frames, run state estimation otherwise just
 % update Q value
@@ -3041,7 +3045,7 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-handles.Q = str2double(get(hObject,'String'));
+handles.Q = abs(str2double(get(hObject,'String')));
 
 % Update handles structure
 guidata(hObject, handles);
