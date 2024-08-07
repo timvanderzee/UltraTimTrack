@@ -2605,8 +2605,10 @@ if isfield(handles,"Region")
         for j = 1:numel(handles.Region(i).Fascicle)
             handles.Region(i).Fascicle(j).fas_x = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x, 'UniformOutput', false);
             handles.Region(i).Fascicle(j).fas_y = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y, 'UniformOutput', false);
-            handles.Region(i).Fascicle(j).fas_x_end = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x_end, 'UniformOutput', false);
-            handles.Region(i).Fascicle(j).fas_y_end = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y_end, 'UniformOutput', false);
+            if isfield(handles.Region(i).Fascicle(j),'fas_x_end') %if estimator ran
+                handles.Region(i).Fascicle(j).fas_x_end = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x_end, 'UniformOutput', false);
+                handles.Region(i).Fascicle(j).fas_y_end = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y_end, 'UniformOutput', false);
+            end
         end
     end
 
