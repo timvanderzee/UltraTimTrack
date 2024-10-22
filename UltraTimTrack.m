@@ -989,51 +989,61 @@ if isfield(handles,'ImStack')
     j = 1;
 
     for f = handles.start_frame:1:get(handles.frame_slider,'Max')
-        % create tracked frame
-        d = round(size(handles.ImStack,2)/2);
-
-        ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
-        ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
-
-        % add padding
-        currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
-
-        % add fascicle
-        currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
-            handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
-
-        currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
-            handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
         
-        % add aponeurosis
-        currentImage = insertShape(currentImage,'line',[handles.Region(i).sup_x{f}(1)+d, handles.Region(i).sup_y{f}(1), ...
-        handles.Region(i).sup_x{f}(2)+d,handles.Region(i).sup_y{f}(2)], 'LineWidth',5, 'Color','blue');
+        if isfield(handles, 'Region')
+            % create tracked frame
+            d = round(size(handles.ImStack,2)/2);
 
-        currentImage = insertShape(currentImage,'line',[handles.Region(i).deep_x{f}(1)+d, handles.Region(i).deep_y{f}(1), ...
-        handles.Region(i).deep_x{f}(2)+d,handles.Region(i).deep_y{f}(2)], 'LineWidth',5, 'Color','green');
+            ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
+            ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
 
-        % add features points
-%         if isfield(handles,'points')
-%             if ~isempty(handles.points{f})
-%                 currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
-%                 currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
-%             end
-%         end
-            
-        % add ROI
-        currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
-            handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
-            handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
+            % add padding
+            currentImage = [ZeroPadL, handles.ImStack(:,:,f), ZeroPadR];
 
-        % save
-        ImTrack = currentImage;
+            % add fascicle
 
-        % show region
-        spos = ceil([handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)]);
-        dpos = ceil([handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)]);
+                currentImage = insertShape(currentImage,'line',[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1), ...
+                    handles.Region(i).Fascicle(j).fas_x{f}(2)+d,handles.Region(i).Fascicle(j).fas_y{f}(2)], 'LineWidth',5, 'Color','red');
 
-        ImTrack(spos(2):(spos(2)+spos(4)),spos(1):(spos(1)+spos(3)),3) = 230;
-        ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):(dpos(1)+dpos(3)),2) = 230;
+                currentImage = insertMarker(currentImage,[handles.Region(i).Fascicle(j).fas_x{f}(1)+d, handles.Region(i).Fascicle(j).fas_y{f}(1);...
+                    handles.Region(i).Fascicle(j).fas_x{f}(2)+d, handles.Region(i).Fascicle(j).fas_y{f}(2)], 'o', 'Color','red','size',5);
+
+                % add aponeurosis
+                currentImage = insertShape(currentImage,'line',[handles.Region(i).sup_x{f}(1)+d, handles.Region(i).sup_y{f}(1), ...
+                handles.Region(i).sup_x{f}(2)+d,handles.Region(i).sup_y{f}(2)], 'LineWidth',5, 'Color','blue');
+
+                currentImage = insertShape(currentImage,'line',[handles.Region(i).deep_x{f}(1)+d, handles.Region(i).deep_y{f}(1), ...
+                handles.Region(i).deep_x{f}(2)+d,handles.Region(i).deep_y{f}(2)], 'LineWidth',5, 'Color','green');
+
+                % add features points
+        %         if isfield(handles,'points')
+        %             if ~isempty(handles.points{f})
+        %                 currentImage = insertMarker(currentImage,[handles.points{f}(:,1)+d, handles.points{f}(:,2)], '+', 'Color','red','size',2);
+        %                 currentImage = insertText(currentImage, [10 10], ['Number of feature points: ' ,num2str(length(handles.points{f}))],'BoxColor','white');
+        %             end
+        %         end
+
+                % add ROI
+                currentImage = insertShape(currentImage,'Polygon',[handles.Region(i).ROIx{f}(1)+d, handles.Region(i).ROIy{f}(1), ...
+                    handles.Region(i).ROIx{f}(2)+d, handles.Region(i).ROIy{f}(2),handles.Region(i).ROIx{f}(3)+d, handles.Region(i).ROIy{f}(3),...
+                    handles.Region(i).ROIx{f}(4)+d, handles.Region(i).ROIy{f}(4),handles.Region(i).ROIx{f}(5)+d, handles.Region(i).ROIy{f}(5)],'LineWidth',1, 'Color','red');
+
+            % save
+            ImTrack = currentImage;
+        else
+            ImTrack = handles.ImStack(:,:,f);
+        end
+
+        if isfield(handles, 'S')
+            if isvalid(handles.S)
+            % show region
+            spos = ceil([handles.S.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.S.Position(4)]);
+            dpos = ceil([handles.D.Position(1:2) ceil(size(handles.ImStack,2)/2) handles.D.Position(4)]);
+
+            ImTrack(spos(2):(spos(2)+spos(4)),spos(1):(spos(1)+spos(3)),3) = 230;
+            ImTrack(dpos(2):(dpos(2)+dpos(4)),dpos(1):(dpos(1)+dpos(3)),2) = 230;
+            end
+        end
 
         F = ImTrack;
         writeVideo(vidObj,F)
@@ -1455,7 +1465,7 @@ if isfield(handles, 'Region')
 
                         plot(handles.mat_plot,time(nz),PEN,'r','linewidth',2);
                         set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
-                        handles.mat_plot.YLabel.String = 'Pennation (deg)';
+                        handles.mat_plot.YLabel.String = 'Fascicle angle (deg)';
                         handles.mat_plot.XLabel.String = 'Time (s)';
 
                     end
@@ -3167,3 +3177,46 @@ handles.ROItype = ROI_options{i};
 
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes on button press in SA.
+function SA_Callback(hObject, eventdata, handles)
+% hObject    handle to SA (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+Qlog = 10.^(-7:3);
+Qlin1 = (1:9) * 10^-3;
+Qlin2 = (1:9) * 10^-4;
+
+Qs = sort([Qlog Qlin1 Qlin2]);
+
+color = parula(length(Qs));
+    
+    for i = 1:length(Qs)
+        handles.Q = Qs(i);
+
+        handles = do_state_estimation(hObject, eventdata, handles);
+
+        figure(2)
+        FL = handles.Region(1).fas_length;
+        PEN = handles.Region(1).fas_pen;
+
+        subplot(121)
+        plot(FL,'color',color(i,:)); hold on
+
+        subplot(122)
+        plot(PEN,'color',color(i,:)); hold on
+        
+        % save
+        Save_As_Mat_Callback(hObject, eventdata, handles)
+
+    end
+
+ legendCell = cellstr(num2str(Qs', 'c=%-d'));
+
+subplot(121)
+legend(legendCell,'location','bestOutside')
+
+subplot(122)
+legend(legendCell,'location','bestOutside')
