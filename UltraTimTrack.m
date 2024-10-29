@@ -1284,7 +1284,7 @@ function PlayButton_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 set(hObject,'Interruptible','on');
-show_data(hObject, handles);
+% show_data(hObject, handles);
 
 frame_no = round(get(handles.frame_slider,'Value'));
 end_frame = get(handles.frame_slider,'Max');
@@ -1642,7 +1642,17 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % detect first frame
-handles = Auto_Detect_Callback(hObject, eventdata, handles);
+if ~isfield(handles, 'h')
+    handles = Auto_Detect_Callback(hObject, eventdata, handles);
+end
+
+handles.Region.Fascicle.fas_x{1} = handles.h.Position(:,1)';
+handles.Region.Fascicle.fas_y{1} = handles.h.Position(:,2)';
+delete(handles.h)
+
+handles.Region.Fascicle.fas_x_original{1} = handles.Region.Fascicle.fas_x{1};
+handles.Region.Fascicle.fas_y_original{1} = handles.Region.Fascicle.fas_y{1};
+handles.Region.Fascicle.current_xy = [handles.Region.Fascicle.fas_x{1}; handles.Region.Fascicle.fas_y{1}]';
 
 % Run TimTrack
 if contains(handles.ROItype, 'Hough')
@@ -2507,15 +2517,6 @@ Super_intersect_x = round((geofeatures.super_coef(2) - geofeatures.fas_coef(2)) 
 Super_intersect_y = polyval(geofeatures.super_coef, Super_intersect_x);
 Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
 
-% draw a fascicle
-% h = drawline('Position', [Deep_intersect_x Deep_intersect_y; Super_intersect_x Super_intersect_y], 'color', 'red', 'linewidth',2);
-
-handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
-handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
-
-handles.Region.Fascicle.fas_x_original{frame_no} = handles.Region.Fascicle.fas_x{frame_no};
-handles.Region.Fascicle.fas_y_original{frame_no} = handles.Region.Fascicle.fas_y{frame_no};
-
 handles.Region(i).sup_x{frame_no} = [1 n]';
 handles.Region(i).sup_y{frame_no} = polyval(geofeatures.super_coef, [1 n]');
 
@@ -2524,6 +2525,15 @@ handles.Region(i).deep_y{frame_no} = polyval(geofeatures.deep_coef, [1 n]');
 
 handles.Region(i).ROIx{frame_no} = [1 1 n n 1]';
 handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) polyval(geofeatures.deep_coef, [1 n]) polyval(geofeatures.super_coef, [n 1])])';
+
+% draw a fascicle
+handles.h = drawline('Position', [Deep_intersect_x Deep_intersect_y; Super_intersect_x Super_intersect_y], 'color', 'red', 'linewidth',2);
+
+handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
+handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
+
+handles.Region.Fascicle.fas_x_original{frame_no} = handles.Region.Fascicle.fas_x{frame_no};
+handles.Region.Fascicle.fas_y_original{frame_no} = handles.Region.Fascicle.fas_y{frame_no};
 
 for i = 1:size(handles.Region,2)
     handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no};handles.Region(i).Fascicle(j).fas_y{frame_no}]';
@@ -2543,8 +2553,8 @@ end
 % Update handles structure
 guidata(hObject, handles);
 
-show_image(hObject,handles);
-show_data(hObject, handles)
+% show_image(hObject,handles);
+% show_data(hObject, handles)
 
 function xshiftcor_Callback(hObject, eventdata, handles)
 % hObject    handle to xshiftcor (see GCBO)
@@ -3222,3 +3232,4 @@ legend(legendCell,'location','bestOutside')
 
 subplot(122)
 legend(legendCell,'location','bestOutside')
+
