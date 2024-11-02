@@ -3201,7 +3201,7 @@ Qlog = 10.^(-7:3);
 Qlin1 = (1:9) * 10^-3;
 Qlin2 = (1:9) * 10^-4;
 
-Qs = sort([Qlog Qlin1 Qlin2]);
+Qs = [sort([Qlog Qlin1 Qlin2]) inf];
 
 color = parula(length(Qs));
     
@@ -3210,26 +3210,99 @@ color = parula(length(Qs));
 
         handles = do_state_estimation(hObject, eventdata, handles);
 
-        figure(2)
-        FL = handles.Region(1).fas_length;
-        PEN = handles.Region(1).fas_pen;
-
-        subplot(121)
-        plot(FL,'color',color(i,:)); hold on
-
-        subplot(122)
-        plot(PEN,'color',color(i,:)); hold on
+%         figure(2)
+        FL(:,i) = handles.Region(1).fas_length;
+        PEN(:,i) = handles.Region(1).fas_pen;
         
         % save
         Save_As_Mat_Callback(hObject, eventdata, handles)
 
     end
 
- legendCell = cellstr(num2str(Qs', 'c=%-d'));
+N = size(FL,1);
+dt = 1/ handles.FrameRate;
+t = 0:dt:((N-1)*dt);
 
-subplot(121)
-legend(legendCell,'location','bestOutside')
+Wn = 1.5*handles.fc_lpf / (.5 * handles.FrameRate);
+Wn(Wn>=1) = 1-1e-6;
+Wn(Wn<=0) = 1e-6;
+[b,a] = butter(2, Wn, 'high');
 
-subplot(122)
-legend(legendCell,'location','bestOutside')
+PEN_low = filtfilt(b,a,PEN);
+FL_low = filtfilt(b,a,FL);
+
+noise = [std(FL_low, 0,1); std(PEN_low, 0,1)];
+drift = [abs(trapz(t, FL-FL(:,end))); abs(trapz(t, PEN-PEN(:,end)))] / max(t);  
+
+%%
+if ishandle(2), close(2); end; figure(2)
+subplot(521)
+set(gca,'colororder',parula(length(Qs))); hold on
+plot(t, FL,'linewidth',2); 
+xlabel('Time (s)')
+ylabel('Length (mm)');
+title('Fascicle length')
+
+subplot(522)
+set(gca,'colororder',parula(length(Qs))); hold on
+plot(t, PEN,'linewidth',2);
+xlabel('Time (s)')
+ylabel('Angle (deg)');
+title('Fascicle angle')
+
+units = {'(mm)', '(deg)'};
+c = linspace(0,1,10);
+colors = cool(length(c));
+
+for j = 1:2
+    subplot(5,2,2+j);
+    semilogx(Qs, drift(j,:),'linewidth',2)
+    xlabel('Q value')
+    ylabel(['Drift ', units(j)]); 
+
+    subplot(5,2,4+j);
+    semilogx(Qs, noise(j,:),'linewidth',2);
+    xlabel('Q value')
+    ylabel(['Noise ', units(j)]); 
+
+    drift_n = drift ./ std(drift,1,2);
+    noise_n = noise ./ std(noise,1,2);
+
+    cost = c(:) * drift_n(j,1:end-1) + (1-c(:))*noise_n(j,1:end-1);
+
+    [mcost, id] = min(cost, [], 2);
+
+    subplot(5,2,6+j);
+    set(gca,'colororder', cool(length(c)),'xscale','log'); hold on
+    semilogx(Qs(1:end-1), cost,'linewidth',2); hold on
+
+    for i = 1:length(c)
+        semilogx(Qs(id(i)), mcost(i),'o','color',colors(i,:).^2,'markerfacecolor',colors(i,:).^2)
+    end
+    
+    xlabel('Q value')
+    ylabel('Drift + Noise'); 
+    
+    subplot(5,2,8+j)
+    semilogy(c, Qs(id),'linewidth',2);
+
+    xlabel('Drift weighting')
+    ylabel('Optimal Q');
+
+end
+
+
+for i = 1:10
+subplot(5,2,i)
+box off
+axis tight
+end
+% %%
+% legendCell = cellstr(num2str(Qs', 'c=%-d'));
+% 
+% subplot(121)
+% legend(legendCell,'location','bestOutside')
+% 
+% subplot(122)
+% legend(legendCell,'location','bestOutside')
 
