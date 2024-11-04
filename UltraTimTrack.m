@@ -2512,9 +2512,11 @@ data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 % handles.parms.fas.range = [5 30];
 
 % run TimTrack
+handles.parms.fas.redo_ROI = 1;
 [geofeatures, ~, parms] = auto_ultrasound(data, handles.parms);
 
 % save parms
+parms.fas.redo_ROI = 0;
 handles.parms = parms;
 
 % scale
