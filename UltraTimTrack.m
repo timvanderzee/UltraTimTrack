@@ -1459,11 +1459,11 @@ if isfield(handles, 'Region')
 
                     for j = 1:length(handles.Region(i).Fascicle)
 
-                        plot(handles.length_plot,time(nz),FL,'r','linewidth',2);
+                        plot(handles.length_plot,time,FL,'r','linewidth',2);
                         set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                         xlabel('Time (s)'); ylabel('Fascicle Length (mm)');
 
-                        plot(handles.mat_plot,time(nz),PEN,'r','linewidth',2);
+                        plot(handles.mat_plot,time,PEN,'r','linewidth',2);
                         set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                         handles.mat_plot.YLabel.String = 'Fascicle angle (deg)';
                         handles.mat_plot.XLabel.String = 'Time (s)';
@@ -1482,7 +1482,7 @@ function handles = show_image(hObject, handles)
 
 if isfield(handles,'ImStack')
     % find current frame number from slider
-    frame_no = round(get(handles.frame_slider,'Value'));
+    frame_no = round(get(handles.frame_slider,'Value')) + handles.start_frame - 1;
 
     i = 1;
     j = 1;
@@ -1512,7 +1512,7 @@ if isfield(handles,'ImStack')
 
  
             % add padding
-            currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no+handles.start_frame-1), ZeroPadR];
+            currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no), ZeroPadR];
 
             % add fascicle
             currentImage = insertShape(currentImage,'line',[fasx(1)+d, fasy(1), ...
@@ -1579,7 +1579,7 @@ if isfield(handles,'ImStack')
         if exist('ImTrack','var')
             Im = ImTrack;
         else
-            Im = handles.ImStack(:,:,frame_no+handles.start_frame-1);
+            Im = handles.ImStack(:,:,frame_no);
         end
 
         if ~isfield(handles, 'image') || ~isvalid(handles.image)
@@ -1616,19 +1616,18 @@ if isfield(handles,'ImStack')
         delete(children(1));
     end
 
+    frames = handles.start_frame:(handles.start_frame + handles.NumFrames-1);
     if isfield(handles,'Region')
-        FL = handles.Region(1).fas_length;
-        PEN = handles.Region(1).fas_pen;
+        FL = handles.Region(1).fas_length(frames);
+        PEN = handles.Region(1).fas_pen(frames);
 
         % add new vertical lines
         dt = 1/handles.FrameRate;
         time = 0:dt:((handles.NumFrames-1)*dt);
-        line(handles.length_plot, 'xdata', time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
-        line(handles.mat_plot, 'xdata', time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
+        line(handles.length_plot, 'xdata', time(frame_no-handles.start_frame+1) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
+        line(handles.mat_plot, 'xdata', time(frame_no-handles.start_frame+1) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
 
     end
-
-    handles.prev_frame_no = frame_no;
 
     % Update handles structure
     guidata(hObject, handles);
@@ -1642,29 +1641,34 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % detect first frame
-if ~isfield(handles, 'h')
+if isfield(handles, 'h'), iv = isvalid(handles.h);
+else, iv = 0;
+end
+if ~iv
     handles = Auto_Detect_Callback(hObject, eventdata, handles);
 end
 
-handles.Region.Fascicle.fas_x{1} = handles.h.Position(:,1)';
-handles.Region.Fascicle.fas_y{1} = handles.h.Position(:,2)';
+handles.Region.Fascicle.fas_x{handles.start_frame} = handles.h.Position(:,1)';
+handles.Region.Fascicle.fas_y{handles.start_frame} = handles.h.Position(:,2)';
 delete(handles.h)
 
-handles.Region.Fascicle.fas_x_original{1} = handles.Region.Fascicle.fas_x{1};
-handles.Region.Fascicle.fas_y_original{1} = handles.Region.Fascicle.fas_y{1};
-handles.Region.Fascicle.current_xy = [handles.Region.Fascicle.fas_x{1}; handles.Region.Fascicle.fas_y{1}]';
+handles.Region.Fascicle.fas_x_original{handles.start_frame} = handles.Region.Fascicle.fas_x{handles.start_frame};
+handles.Region.Fascicle.fas_y_original{handles.start_frame} = handles.Region.Fascicle.fas_y{handles.start_frame};
+handles.Region.Fascicle.current_xy = [handles.Region.Fascicle.fas_x{handles.start_frame}; handles.Region.Fascicle.fas_y{handles.start_frame}]';
 
 % Run TimTrack
 if contains(handles.ROItype, 'Hough')
     handles = process_all_TimTrack(hObject, eventdata, handles);
 end
 
-% Run UltraTrack (note: includes state estimation on ROI)
-handles = process_all_UltraTrack(hObject, eventdata, handles);
+if isfield(handles, 'geofeatures')
+    % Run UltraTrack (note: includes state estimation on ROI)
+    handles = process_all_UltraTrack(hObject, eventdata, handles);
 
-if contains(handles.ROItype, 'Hough')
-    % % State estimation
-    handles = do_state_estimation(hObject, eventdata, handles);
+    if contains(handles.ROItype, 'Hough')
+        % % State estimation
+        handles = do_state_estimation(hObject, eventdata, handles);
+    end
 end
 
 % update the image axes using show_image function (bottom)
@@ -1680,8 +1684,11 @@ h = waitbar(0,['Processing frame 1/', num2str(handles.NumFrames)],'Name','Runnin
 
 tstart = tic;
 
+frames = handles.start_frame:(handles.start_frame + handles.NumFrames-1);
+% numIterations = length(frames);
+
 for i = 1:length(handles.Region)
-    for f = 1:handles.NumFrames
+    for f = frames
         
     % extract image
     im = handles.ImStack(:,:,f);
@@ -1753,7 +1760,7 @@ for i = 1:length(handles.Region)
    
     for j = 1:length(handles.Region(i).Fascicle)
 
-        if f == 1
+        if f == handles.start_frame
             % detect points
             fpoints = detectMinEigenFeatures(I_fmasked,'FilterSize',11, 'MinQuality', 0.005);           
             
@@ -1921,8 +1928,8 @@ for i = 1:length(handles.Region)
         
     end
 
-        frac_progress = (f+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
-        waitbar(frac_progress,h, ['Processing frame ', num2str(f), '/', num2str(get(handles.frame_slider,'Max'))])
+        frac_progress = ((f-handles.start_frame)+(get(handles.frame_slider,'Max')*(i-1))) / (get(handles.frame_slider,'Max')*length(handles.Region));
+        waitbar(frac_progress,h, ['Processing frame ', num2str((f-handles.start_frame)), '/', num2str(get(handles.frame_slider,'Max'))])
     end
 
 end
@@ -1933,7 +1940,7 @@ handles.ProcessingTime(2) = toc(tstart);
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
 % run TimTrack on all frames
-frames = 1:handles.NumFrames;
+frames = handles.start_frame:(handles.start_frame + handles.NumFrames-1);
 numIterations = length(frames);
 
 parms = handles.parms;
@@ -1970,6 +1977,7 @@ if isfield(handles,'ImStack')
         return
     end
 
+    if ~strcmp(answer,'Cancel')
     for i = 1:length(handles.Region)
         % TimTrack (parfor or for)
         if handles.do_parfor.Value
@@ -1992,7 +2000,7 @@ if isfield(handles,'ImStack')
             for f = frames
 
                 geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
-                waitbar(f / numIterations, hwb, sprintf('Processing frame %d/%d', f, numIterations));
+                waitbar((f-handles.start_frame) / numIterations, hwb, sprintf('Processing frame %d/%d', (f-handles.start_frame), numIterations));
 
             end
             close(hwb)
@@ -2000,7 +2008,7 @@ if isfield(handles,'ImStack')
         end
 
         % Adjust the parameter of geofeatures
-        for kk = 1:length(geofeatures)
+        for kk = frames
             geofeatures(kk).super_coef(2)   = geofeatures(kk).super_coef(2) * handles.imresize_fac;
             geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
             geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
@@ -2016,20 +2024,25 @@ if isfield(handles,'ImStack')
 
 
     end
+    end
 end
 
 function[handles] = estimate_variance(hObject, eventdata, handles)
 
 geofeatures = handles.geofeatures;
 
+% frames = handles.start_frame:handles.start_frame + handles.NumFrames-1;
+% numIterations = length(frames);
+
 x = nan(handles.NumFrames,1);
+
 for f = 1:handles.NumFrames
-    x(f,1) = geofeatures(f).alpha;
+    x(f,1) = geofeatures(f+handles.start_frame-1).alpha;
 %     x(f,2) = geofeatures(f).thickness;
-    x(f,2) = geofeatures(f).super_pos(1);
-    x(f,3) = geofeatures(f).super_pos(2);
-    x(f,4) = geofeatures(f).deep_pos(1);
-    x(f,5) = geofeatures(f).deep_pos(1);
+    x(f,2) = geofeatures(f+handles.start_frame-1).super_pos(1);
+    x(f,3) = geofeatures(f+handles.start_frame-1).super_pos(2);
+    x(f,4) = geofeatures(f+handles.start_frame-1).deep_pos(1);
+    x(f,5) = geofeatures(f+handles.start_frame-1).deep_pos(1);
 end
 
 Wn = 1.5*handles.fc_lpf / (.5 * handles.FrameRate);
@@ -2054,7 +2067,7 @@ if ~isnan(handles.Q)
     handles = estimate_variance(hObject, eventdata, handles);
     
     % forward state estimation
-    for f = 2:get(handles.frame_slider,'Max')
+    for f = (handles.start_frame+1):length(handles.geofeatures)
         for i = 1:length(handles.Region)
             for j = 1:length(handles.Region(i).Fascicle)
                 % state estimation
@@ -2064,7 +2077,7 @@ if ~isnan(handles.Q)
     end
     
     % forward state estimation
-    for f = 2:get(handles.frame_slider,'Max')
+    for f = (handles.start_frame+1):length(handles.geofeatures)
         for i = 1:length(handles.Region)
             for j = 1:length(handles.Region(i).Fascicle)
                 % state estimation
@@ -2074,14 +2087,14 @@ if ~isnan(handles.Q)
     end
 
     % Rauch-Tung-Striebel backwards filter
-    for f = (get(handles.frame_slider,'Max')-1):-1:1
+    for f = (length(handles.geofeatures)-1):-1:handles.start_frame
         for i = 1:length(handles.Region)
             for j = 1:length(handles.Region(i).Fascicle)
                 handles = state_smoothener(handles,f,f+1);
             end
         end
     end
-% % 
+ 
     show_image(hObject,handles);
     show_data(hObject, handles);
     guidata(hObject, handles);
@@ -2149,7 +2162,7 @@ deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 
 % get the vertical point from the estimated aponeurosis
 % fasy2_smooth = super_coef(2) + fasx2_smooth*super_coef(1);
-fasy2 = handles.Region(i).Fascicle(j).fas_y{1}(2);
+fasy2 = handles.Region(i).Fascicle(j).fas_y{handles.start_frame}(2);
 
 % get the deep attachment point from the superficial point and the angle
 fas_coef(1) = -tand(alpha_smooth);
@@ -2203,8 +2216,9 @@ P_plus = nan(size(apo_new_y));
 apo_y = [handles.geofeatures(frame_no).super_pos'; handles.geofeatures(frame_no).deep_pos'];
 
 Rs = handles.R(2:end) * .01;
-handles.Region(i).apo_p{1} = Rs;
+handles.Region(i).apo_p{handles.start_frame} = Rs;
 
+% loop over points (4)
 for kk = 1:numel(apo_new_y)
     dapo = abs(apo_new_y(kk) - apo_prev_y(kk));
    
@@ -2256,21 +2270,21 @@ function[handles] = state_estimator(handles,frame_no,prev_frame_no)
 i = 1; j = 1;
 
 % if the second frame, we need to calculate the first frame
-if frame_no == 2
+if frame_no == (handles.start_frame + 1)
 
     alpha0 = nan(1,handles.NS);
-    for k = 1:handles.NS
-        alpha0(k) = handles.geofeatures(k).alpha;
+    for k = 1:handles.NS % number of starting frames
+        alpha0(k) = handles.geofeatures(k+handles.start_frame-1).alpha;
     end
 
-    handles.Region(i).Fascicle(j).X_plus{1} = [handles.Region(i).Fascicle(j).fas_x{1}(2) mean(alpha0)];
-    handles.Region(i).Fascicle(j).fas_p{1} = [0 var(alpha0)];
+    handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2) mean(alpha0)];
+    handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 var(alpha0)];
 
     % a priori is the same as a positeriori
-    handles.Region(i).Fascicle(j).fas_p_minus{1} = handles.Region(i).Fascicle(j).fas_p{1};
-    handles.Region(i).Fascicle(j).X_minus{1} = handles.Region(i).Fascicle(j).X_plus{1};
+    handles.Region(i).Fascicle(j).fas_p_minus{handles.start_frame} = handles.Region(i).Fascicle(j).fas_p{handles.start_frame};
+    handles.Region(i).Fascicle(j).X_minus{handles.start_frame} = handles.Region(i).Fascicle(j).X_plus{handles.start_frame};
 
-    handles = update_Fascicle(handles,1);
+    handles = update_Fascicle(handles,handles.start_frame);
 
 end
 
@@ -2301,7 +2315,7 @@ s.R = handles.X;
 s.x_minus = x_minus(1);
 
 % 'measurement', here is the first value
-s.y = handles.Region(i).Fascicle(j).fas_x{1}(2);
+s.y = handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2);
 
 % previous state covariance
 s.P_prev = P_prev(1);
@@ -2392,7 +2406,7 @@ deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
 % fasy2_plus = super_coef(2) + fasx2_plus*super_coef(1);
 
 % vertical location is fixed
-fasy2 = handles.Region(i).Fascicle(j).fas_y{1}(2);
+fasy2 = handles.Region(i).Fascicle(j).fas_y{handles.start_frame}(2);
 
 % get the deep attachment point from the superficial point and the angle
 fas_coef(1) = -tand(alpha_plus);
@@ -2480,11 +2494,11 @@ set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 % max range
 % parms.fas.range = 90 - [-90 89];
 
-% find current frame number from slider
-frame_no = round(get(handles.frame_slider,'Value'));
+% find the first frame
+frame_no = handles.start_frame; 
 
 % % detect orientation
-data = imresize(handles.ImStack(:,:,frame_no+handles.start_frame-1), 1/handles.imresize_fac);
+data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 % [geofeatures, ~, parms] = auto_ultrasound(data, parms);
 % alphas = geofeatures.alphas;
 % alphas(alphas==90 | alphas == 180) = [];
@@ -3211,8 +3225,8 @@ color = parula(length(Qs));
         handles = do_state_estimation(hObject, eventdata, handles);
 
 %         figure(2)
-        FL(:,i) = handles.Region(1).fas_length;
-        PEN(:,i) = handles.Region(1).fas_pen;
+        FL(:,i) = handles.Region(1).fas_length(handles.start_frame:end);
+        PEN(:,i) = handles.Region(1).fas_pen(handles.start_frame:end);
         
         % save
         Save_As_Mat_Callback(hObject, eventdata, handles)
@@ -3251,7 +3265,7 @@ ylabel('Angle (deg)');
 title('Fascicle angle')
 
 units = {'(mm)', '(deg)'};
-c = linspace(0,1,10);
+c = 0:.1:1;
 colors = cool(length(c));
 
 for j = 1:2
