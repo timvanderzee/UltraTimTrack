@@ -1510,7 +1510,6 @@ if isfield(handles,'ImStack')
             ZeroPadL = 200*ones(size(handles.ImStack,1), ceil(size(handles.ImStack,2)/2),'uint8');
             ZeroPadR = 200*ones(size(handles.ImStack,1), floor(size(handles.ImStack,2)/2),'uint8');
 
- 
             % add padding
             currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no), ZeroPadR];
 
@@ -1640,6 +1639,8 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+
+
 % detect first frame
 if isfield(handles, 'h'), iv = isvalid(handles.h);
 else, iv = 0;
@@ -1651,6 +1652,8 @@ end
 handles.Region.Fascicle.fas_x{handles.start_frame} = handles.h.Position(:,1)';
 handles.Region.Fascicle.fas_y{handles.start_frame} = handles.h.Position(:,2)';
 delete(handles.h)
+delete(handles.d)
+delete(handles.s)
 
 handles.Region.Fascicle.fas_x_original{handles.start_frame} = handles.Region.Fascicle.fas_x{handles.start_frame};
 handles.Region.Fascicle.fas_y_original{handles.start_frame} = handles.Region.Fascicle.fas_y{handles.start_frame};
@@ -2495,24 +2498,19 @@ set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 % parms.fas.range = 90 - [-90 89];
 
 % find the first frame
-frame_no = handles.start_frame; 
+frame_no = handles.start_frame + round(get(handles.frame_slider,'Value')) - 1; 
 
 % % detect orientation
 data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
-% [geofeatures, ~, parms] = auto_ultrasound(data, parms);
-% alphas = geofeatures.alphas;
-% alphas(alphas==90 | alphas == 180) = [];
-% %
-% if median(alphas) < 90 || isempty(alphas)
-%     parms.fas.range = [5 80];
-% else
-%     parms.fas.range = [5 80] + 90;
-% end
 
-% handles.parms.fas.range = [5 30];
+% handles.parms.
 
 % run TimTrack
 handles.parms.fas.redo_ROI = 1;
+handles.parms.fas.range(1) = max([handles.alpha0 1]);
+
+% figure(10)
+% handles.parms.show = 1;
 [geofeatures, ~, parms] = auto_ultrasound(data, handles.parms);
 
 % save parms
@@ -2544,6 +2542,8 @@ handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) pol
 
 % draw a fascicle
 handles.h = drawline('Position', [Deep_intersect_x Deep_intersect_y; Super_intersect_x Super_intersect_y], 'color', 'red', 'linewidth',2);
+handles.d = drawline('Position', [1 polyval(geofeatures.super_coef, 1); n polyval(geofeatures.super_coef, n)], 'color', 'blue', 'linewidth',2);
+handles.s = drawline('Position', [1 polyval(geofeatures.deep_coef, 1); n polyval(geofeatures.deep_coef, n)], 'color', 'green', 'linewidth',2);
 
 handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
 handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
@@ -3206,6 +3206,35 @@ handles.ROItype = ROI_options{i};
 % Update handles structure
 guidata(hObject, handles);
 
+function alpha_min_Callback(hObject, eventdata, handles)
+% hObject    handle to alpha_min (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of alpha_min as text
+%        str2double(get(hObject,'String')) returns contents of alpha_min as a double
+
+handles.alpha0 = abs(str2double(get(hObject,'String')));
+
+% Update handles structure
+guidata(hObject, handles);
+
+% --- Executes during object creation, after setting all properties.
+function alpha_min_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to alpha_min (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.alpha0 = abs(str2double(get(hObject,'String')));
+
+% Update handles structure
+guidata(hObject, handles);
 
 % --- Executes on button press in SA.
 function SA_Callback(hObject, eventdata, handles)
@@ -3321,4 +3350,5 @@ end
 % 
 % subplot(122)
 % legend(legendCell,'location','bestOutside')
+
 
