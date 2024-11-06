@@ -3276,7 +3276,8 @@ Wn(Wn<=0) = 1e-6;
 PEN_low = filtfilt(b,a,PEN);
 FL_low = filtfilt(b,a,FL);
 
-noise = [std(FL_low, 0,1); std(PEN_low, 0,1)];
+% noise = [std(FL_low, 0,1); std(PEN_low, 0,1)];
+noise = [mean(abs(diff(diff(FL)))); mean(abs(diff(diff(PEN))))];
 drift = [abs(trapz(t, FL-FL(:,end))); abs(trapz(t, PEN-PEN(:,end)))] / max(t);  
 
 %%
