@@ -831,6 +831,9 @@ function menu_load_fascicle_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
+
 if isfield(handles,'ImStack')
 
     % find current frame number from slider
@@ -838,37 +841,49 @@ if isfield(handles,'ImStack')
     [fname, pname] = uigetfile('*.mat','Load tracking MAT file');
     load([pname fname]);
 
+
     if exist('Fdat','var') && isfield(Fdat,'Region') && isfield(Fdat.Region,'Fascicle')
 
         for i = 1:length(Fdat.Region)
 
             for k = 1:length(Fdat.Region(i).Fascicle)
 
-                handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x;
-                handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y;
+%                 for f = 1:handles.N
+                N = length(Fdat.Region(i).Fascicle(k).fas_x);
+                handles.Region(i).Fascicle(k).current_xy = nan(2,2);
+                for frame_no = 1:N
+                    handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{frame_no};
+                    handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{frame_no};
 
-                handles.Region(i).Fascicle(k).current_xy(1,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(1);
-                handles.Region(i).Fascicle(k).current_xy(1,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(1);
-                handles.Region(i).Fascicle(k).current_xy(2,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(2);
-                handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
-                %Add ROI data
-                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
-                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
+                    handles.Region(i).sup_x{frame_no} = Fdat.Region(i).sup_x{frame_no};
+                    handles.Region(i).sup_y{frame_no} = Fdat.Region(i).sup_y{frame_no};
+                    
+                    handles.Region(i).deep_x{frame_no} = Fdat.Region(i).deep_x{frame_no};
+                    handles.Region(i).deep_y{frame_no} = Fdat.Region(i).deep_y{frame_no};
 
-                % handles.Region(i).fas_pen(frame_no,k) = atan2d(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
-                % scalar = handles.ID;%/handles.vidHeight;
-                % handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
-                % calculate fascicle length and penn
-                handles = calc_fascicle_length_and_pennation(handles,frame_no);
+                    handles.Region(i).Fascicle(k).current_xy(1,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(1);
+                    handles.Region(i).Fascicle(k).current_xy(1,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(1);
+                    handles.Region(i).Fascicle(k).current_xy(2,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(2);
+                    handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
+                    %Add ROI data
+                    handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx{frame_no};
+                    handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy{frame_no};
 
-                if ~isfield(handles.Region(i).Fascicle(k),'analysed_frames')
-                    handles.Region(i).Fascicle(k).analysed_frames = frame_no;
-                else
-                    handles.Region(i).Fascicle(k).analysed_frames = sort([handles.Region(i).Fascicle(k).analysed_frames frame_no]);
+                    % handles.Region(i).fas_pen(frame_no,k) = atan2d(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
+                    % scalar = handles.ID;%/handles.vidHeight;
+                    % handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
+                    % calculate fascicle length and penn
+                    handles = calc_fascicle_length_and_pennation(handles,frame_no);
+
+                    if ~isfield(handles.Region(i).Fascicle(k),'analysed_frames')
+                        handles.Region(i).Fascicle(k).analysed_frames = frame_no;
+                    else
+                        handles.Region(i).Fascicle(k).analysed_frames = sort([handles.Region(i).Fascicle(k).analysed_frames frame_no]);
+                    end
                 end
             end
 
-            Nfascicle(i) = length(handles.Region(i).Fascicle);
+%             Nfascicle(i) = length(handles.Region(i).Fascicle);
 
         end
 
@@ -2149,7 +2164,7 @@ for m = 1:2
     A(isnan(A)) = 1;
 
     xsmooth(m)     = xcorr(m) + A*(xsmooth(m) - xpred(m));
-    Psmooth(m)     = Pcorr(m) + A*(Psmooth(m) - Ppred(m));
+    Psmooth(m)     = Pcorr(m) + A*(Psmooth(m) - Ppred(m))*A;
 end
 
 fasx2_smooth = xsmooth(1);
