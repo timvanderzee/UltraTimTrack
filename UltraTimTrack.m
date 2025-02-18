@@ -1496,6 +1496,7 @@ end
 function handles = show_image(hObject, handles)
 
 if isfield(handles,'ImStack')
+    
     % find current frame number from slider
     frame_no = round(get(handles.frame_slider,'Value')) + handles.start_frame - 1;
 
@@ -1503,6 +1504,7 @@ if isfield(handles,'ImStack')
     j = 1;
 
     if isfield(handles, 'Region')
+        
         if length(handles.Region(i).Fascicle(j).fas_x) >= frame_no
            f = frame_no;
            
@@ -1632,9 +1634,13 @@ if isfield(handles,'ImStack')
 
     frames = handles.start_frame:(handles.start_frame + handles.NumFrames-1);
     if isfield(handles,'Region')
-        FL = handles.Region(1).fas_length(frames);
-        PEN = handles.Region(1).fas_pen(frames);
-
+        % if length(handles.Region(1).fas_length) == frames(end)
+            FL = handles.Region(1).fas_length(frames);
+            PEN = handles.Region(1).fas_pen(frames);
+        % else
+        %     FL = handles.Region(1).fas_length(:);
+        %     PEN = handles.Region(1).fas_pen(:);
+        % end
         % add new vertical lines
         dt = 1/handles.FrameRate;
         time = 0:dt:((handles.NumFrames-1)*dt);
@@ -2522,7 +2528,8 @@ data = imresize(handles.ImStack(:,:,frame_no), 1/handles.imresize_fac);
 
 % run TimTrack
 handles.parms.fas.redo_ROI = 1;
-handles.parms.fas.range(1) = max([handles.alpha0 1]);
+%handles.parms.fas.range(1) = max([handles.alpha0 1]); %not necessary
+%anymore
 
 % figure(10)
 % handles.parms.show = 1;
@@ -2651,6 +2658,11 @@ if isfield(handles,"Region")
 
         if isfield(handles.Region(i),"ROI")
             handles.Region(i).ROI = cellfun(@fliplr, handles.Region(i).ROI, 'UniformOutput', false);
+        end
+        if isfield(handles.Region(i),"deep_x") && isfield(handles.Region(i),"deep_y")
+            handles.Region(i).sup_y = cellfun(@flip, handles.Region(i).sup_y , 'UniformOutput', false);
+            handles.Region(i).deep_y = cellfun(@flip, handles.Region(i).deep_y , 'UniformOutput', false);
+
         end
         %adjust each fascicle's pts
         for j = 1:numel(handles.Region(i).Fascicle)
@@ -2794,17 +2806,8 @@ function Process_folder_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% dir_data = uigetdir(cd,'Select folder with video(s)');
+dir_data = uigetdir(cd,'Select folder with video(s)');
 
-mainfolder = 'C:\Users\u0167448\OneDrive - KU Leuven\8. Ultrasound comparison - TBD\UltraTimTrack_testing';
-cd(mainfolder)
-files = dir;
-dirFlags = [files.isdir];
-% Extract only those that are directories.
-subFolders = files(dirFlags); % A structure with extra info.zf
-
-for j = 2:(length(subFolders)-2)
-    dir_data = [mainfolder, '\',subFolders(j+2).name];
 if dir_data == 0 %no folder selected, just return
     return
 end
@@ -2830,15 +2833,8 @@ end
 files(ind_toRemove) = []; %keep videos
 % clearvars -except files eventdata hObject handles subFolders
 
-% for j = 1:length(subfolders)
-%     foldername = subfolders{j};
-%
-%     cd([mainfolder foldername]);
-%
-%     files = dir('*.mp4');
-%
 
-for k = [2,4,6, length(files)] %1:numel(files) %foreach file
+for k = 1:numel(files) %foreach file
 
     handles.fname = files(k).name;
     handles.pname = [files(k).folder,'/'];
@@ -2934,7 +2930,7 @@ for k = [2,4,6, length(files)] %1:numel(files) %foreach file
     % show
     handles = show_image(hObject,handles);
 
-    %create a subfolder where to save results
+    %create a subfolder where to save results and tracked videos
     if ~exist([handles.pname 'Tracked/'], 'dir')
         mkdir([handles.pname 'Tracked/'])
     end
@@ -2942,27 +2938,26 @@ for k = [2,4,6, length(files)] %1:numel(files) %foreach file
     
     % process
     handles = process_all_Callback(hObject, eventdata, handles);
+    % 
+    % if strcmp(handles.ROItype(1:5), 'Hough')
+    %     Qs = [0, 10.^(-4:0), 1000, inf];
+    % else
+    %     Qs = nan;
+    % end
+    % 
+    % for i = 1:length(Qs)
+    %     handles.Q = Qs(i);
 
-    if strcmp(handles.ROItype(1:5), 'Hough')
-        Qs = [0, 10.^(-4:0), 1000, inf];
-    else
-        Qs = nan;
-    end
-    
-    for i = 1:length(Qs)
-        handles.Q = Qs(i);
-
-        if strcmp(handles.ROItype(1:5), 'Hough')
+    %    if strcmp(handles.ROItype(1:5), 'Hough')
             handles = do_state_estimation(hObject, eventdata, handles);
-        end
+    %    end
         
         % save
         save_video_Callback(hObject, eventdata, handles)
         Save_As_Mat_Callback(hObject, eventdata, handles)
 
     end
-end
-end
+
 
 
 function freq_lpf_Callback(hObject, eventdata, handles)
@@ -3368,3 +3363,13 @@ end
 % legend(legendCell,'location','bestOutside')
 
 
+
+% --------------------------------------------------------------------
+function set_Tim_Track_Callback(hObject, eventdata, handles)
+% hObject    handle to set_Tim_Track (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+%if the cross is pressed nothing is updated anyway
+handles.parms = adjust_hough_parameters(handles.parms);
+% Update handles structure
+guidata(hObject, handles);
