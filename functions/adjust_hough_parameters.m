@@ -30,23 +30,12 @@ uicontrol('Style', 'pushbutton', 'String', 'Save', ...
     'FontSize', 12, 'Callback', @okButtonCallback);
 
 
-%% Callback function for width
-    function input1Callback(hObject, ~)
-        % Enforce numeric input only
-        input = get(hObject, 'String');
-        input = str2double(input);
-        if isempty(input) || isnan(input) || mod(input,2) ~= 1 || input < 5
-            set(hObject, 'String',  parms(1) );
-            errordlg('Input must be an odd number > 3', 'Error', 'modal');
-        end
-    end
-
 % OK Button
 uicontrol('Style', 'pushbutton', 'String', 'Save', ...
     'Units', 'normalized', 'Position', [0.35 0.05 0.3 0.15], ...
     'FontSize', 12, 'Callback', @okButtonCallback);
 
-% Callback function to update parameter values
+%% Callback function to update parameter values
     function update_param(field, src)
         value = str2double(get(src, 'String'));
         if isnan(value) || isempty(value) || (value>=90) 
@@ -57,7 +46,7 @@ uicontrol('Style', 'pushbutton', 'String', 'Save', ...
         end
     end
 
-% OK Button Callback and update parms to the struct before returning it
+%% OK Button Callback and update parms to the struct before returning it
     function okButtonCallback(~, ~)
 
         parms.fas.range = adj_parms(1:2);
