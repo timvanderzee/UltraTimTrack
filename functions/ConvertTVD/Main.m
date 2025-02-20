@@ -27,7 +27,7 @@ h = waitbar(0,['Overall progress: Processing 1/' num2str(length(TVDfiles))],'Col
 hp = get(h,'Position');
 set(h,'Position',[hp(1),hp(2)+hp(4),hp(3),hp(4)]);
 hcc = get(get(h,'Children'),'Children');
-for jj = 69:length(TVDfiles)
+for jj = 1:length(TVDfiles)
     waitbar(double(jj-1)/double(length(TVDfiles)),h,...
     ['Overall progress: Processing ' num2str(jj) '/' num2str(length(TVDfiles))])
     % uipickfiles stores filenames as a cell so index to a cell
