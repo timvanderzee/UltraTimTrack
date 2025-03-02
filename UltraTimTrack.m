@@ -1660,26 +1660,26 @@ function[handles] = process_all_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
+% check whether we have an intial estimates
+if isfield(handles, 'h')
 
+    % if no lines exist, create them
+    if ~isvalid(handles.h) || ~isvalid(handles.d) || ~isvalid(handles.s)
+        handles = Auto_Detect_Callback(hObject, eventdata, handles);
+    end
 
-% detect first frame
-if isfield(handles, 'h'), iv = isvalid(handles.h);
-else, iv = 0;
-end
-if ~iv
+else
     handles = Auto_Detect_Callback(hObject, eventdata, handles);
 end
 
-handles.Region.Fascicle.fas_x{handles.start_frame} = handles.h.Position(:,1)';
-handles.Region.Fascicle.fas_y{handles.start_frame} = handles.h.Position(:,2)';
-delete(handles.h)
-delete(handles.d)
-delete(handles.s)
+if isvalid(handles.h) && isvalid(handles.d) && isvalid(handles.s)
+    handles = extract_estimates(hObject, eventdata, handles);
 
-handles.Region.Fascicle.fas_x_original{handles.start_frame} = handles.Region.Fascicle.fas_x{handles.start_frame};
-handles.Region.Fascicle.fas_y_original{handles.start_frame} = handles.Region.Fascicle.fas_y{handles.start_frame};
-handles.Region.Fascicle.current_xy = [handles.Region.Fascicle.fas_x{handles.start_frame}; handles.Region.Fascicle.fas_y{handles.start_frame}]';
-
+    delete(handles.h)
+    delete(handles.d)
+    delete(handles.s)
+end
+    
 % Run TimTrack
 if contains(handles.ROItype, 'Hough')
     handles = process_all_TimTrack(hObject, eventdata, handles);
@@ -1827,12 +1827,12 @@ for i = 1:length(handles.Region)
             end
             
             % apply the warp to fascicles
-            fas_prev = [handles.Region(i).Fascicle(j).fas_x{f-1}' handles.Region(i).Fascicle(j).fas_y{f-1}'];
+            fas_prev = [handles.Region(i).Fascicle(j).fas_x{f-1} handles.Region(i).Fascicle(j).fas_y{f-1}];
             fas_new = transformPointsForward(wf, fas_prev);
             
             % save
-            handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1)';
-            handles.Region(i).Fascicle(j).fas_y{f} = fas_new(:,2)';
+            handles.Region(i).Fascicle(j).fas_x{f} = fas_new(:,1);
+            handles.Region(i).Fascicle(j).fas_y{f} = fas_new(:,2);
 
             % make a copy
             handles.Region(i).Fascicle(j).fas_x_original{f} = handles.Region(i).Fascicle(j).fas_x{f};
@@ -2200,11 +2200,11 @@ fasy2_smooth = fasy2;
 fasx2_smooth_end = (fas_coef(2) - super_coef(2)) / (super_coef(1) - fas_coef(1));
 fasy2_smooth_end = super_coef(2) + fasx2_smooth_end*super_coef(1);
 
-handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_smooth fasx2_smooth];
-handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_smooth fasy2_smooth];
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_smooth; fasx2_smooth];
+handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_smooth; fasy2_smooth];
 
-handles.Region(i).Fascicle(j).fas_x_end{frame_no}   = [fasx1_smooth fasx2_smooth_end];
-handles.Region(i).Fascicle(j).fas_y_end{frame_no}   = [fasy1_smooth fasy2_smooth_end];
+handles.Region(i).Fascicle(j).fas_x_end{frame_no}   = [fasx1_smooth; fasx2_smooth_end];
+handles.Region(i).Fascicle(j).fas_y_end{frame_no}   = [fasy1_smooth; fasy2_smooth_end];
 
 handles.Region(i).Fascicle(j).alpha{frame_no}       = alpha_smooth;
 handles.Region(i).Fascicle(j).fas_p{frame_no}       = Psmooth;
@@ -2313,7 +2313,7 @@ if frame_no == (handles.start_frame + 1)
 end
 
 %% Apply warp
-fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no}' handles.Region(i).Fascicle(j).fas_y{prev_frame_no}'];
+fas_prev = [handles.Region(i).Fascicle(j).fas_x{prev_frame_no} handles.Region(i).Fascicle(j).fas_y{prev_frame_no}];
 alpha_prev = handles.Region(i).Fascicle(j).alpha{prev_frame_no};
 
 w = handles.Region(i).warp(:,:,prev_frame_no);
@@ -2446,11 +2446,11 @@ fasy2_end = super_coef(2) + fasx2_end*super_coef(1);
 
 %% update
 % state and dependent variables
-handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_end fasx2_plus];
-handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_end fasy2];
+handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_end; fasx2_plus];
+handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_end; fasy2];
 
-handles.Region(i).Fascicle(j).fas_x_end{frame_no}   = [fasx1_end fasx2_end];
-handles.Region(i).Fascicle(j).fas_y_end{frame_no}   = [fasy1_end fasy2_end];
+handles.Region(i).Fascicle(j).fas_x_end{frame_no}   = [fasx1_end; fasx2_end];
+handles.Region(i).Fascicle(j).fas_y_end{frame_no}   = [fasy1_end; fasy2_end];
 
 handles.Region(i).Fascicle(j).alpha{frame_no}   = alpha_plus;
 
@@ -2495,6 +2495,11 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % hObject    handle to Auto_Detect (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+% initialize
+N = handles.NumFrames;
+handles.Region(1).fas_length    = nan(N,1);
+handles.Region(1).fas_pen       = nan(N,1);
 
 w = handles.vidWidth;
 
@@ -2546,35 +2551,48 @@ geofeatures.deep_coef(2) = geofeatures.deep_coef(2)       .* [handles.imresize_f
 geofeatures.fas_coef(2) = geofeatures.fas_coef(2)         .* [handles.imresize_fac];
 
 n = handles.vidWidth;
-i = 1; j = 1;
 
 Deep_intersect_x = round((geofeatures.deep_coef(2) - geofeatures.fas_coef(2))   ./ (geofeatures.fas_coef(1) - geofeatures.deep_coef(1)));
 Super_intersect_x = round((geofeatures.super_coef(2) - geofeatures.fas_coef(2)) ./ (geofeatures.fas_coef(1) - geofeatures.super_coef(1)));
 Super_intersect_y = polyval(geofeatures.super_coef, Super_intersect_x);
 Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
 
-handles.Region(i).sup_x{frame_no} = [1 n]';
-handles.Region(i).sup_y{frame_no} = polyval(geofeatures.super_coef, [1 n]');
-
-handles.Region(i).deep_x{frame_no} = [1 n]';
-handles.Region(i).deep_y{frame_no} = polyval(geofeatures.deep_coef, [1 n]');
-
-handles.Region(i).ROIx{frame_no} = [1 1 n n 1]';
-handles.Region(i).ROIy{frame_no} = round([polyval(geofeatures.super_coef, 1) polyval(geofeatures.deep_coef, [1 n]) polyval(geofeatures.super_coef, [n 1])])';
-
 % draw a fascicle
 handles.h = drawline('Position', [Deep_intersect_x Deep_intersect_y; Super_intersect_x Super_intersect_y], 'color', 'red', 'linewidth',2);
-handles.d = drawline('Position', [1 polyval(geofeatures.super_coef, 1); n polyval(geofeatures.super_coef, n)], 'color', 'blue', 'linewidth',2);
-handles.s = drawline('Position', [1 polyval(geofeatures.deep_coef, 1); n polyval(geofeatures.deep_coef, n)], 'color', 'green', 'linewidth',2);
+handles.s = drawline('Position', [1 polyval(geofeatures.super_coef, 1); n polyval(geofeatures.super_coef, n)], 'color', 'blue', 'linewidth',2);
+handles.d = drawline('Position', [1 polyval(geofeatures.deep_coef, 1); n polyval(geofeatures.deep_coef, n)], 'color', 'green', 'linewidth',2);
 
-handles.Region.Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x];
-handles.Region.Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y];
+% [handles] = extract_estimates(hObject, eventdata, handles);
+
+% Update handles structure
+guidata(hObject, handles);
+
+% show_image(hObject,handles);
+% show_data(hObject, handles)
+
+function [handles] = extract_estimates(hObject, eventdata, handles)
+
+i = 1; 
+j = 1;
+frame_no = handles.start_frame + round(get(handles.frame_slider,'Value')) - 1; 
+
+handles.Region(i).sup_x{frame_no} = handles.s.Position(:,1);
+handles.Region(i).sup_y{frame_no} = handles.s.Position(:,2);
+
+handles.Region(i).deep_x{frame_no} = handles.d.Position(:,1);
+handles.Region(i).deep_y{frame_no} = handles.d.Position(:,2);
+
+handles.Region(i).ROIx{frame_no} = [handles.s.Position(1,1); handles.d.Position([1 2],1); handles.s.Position([2 1],1)];
+handles.Region(i).ROIy{frame_no} = [handles.s.Position(1,2); handles.d.Position([1 2],2); handles.s.Position([2 1],2)];
+
+handles.Region.Fascicle.fas_x{frame_no} = handles.h.Position(:,1);
+handles.Region.Fascicle.fas_y{frame_no} = handles.h.Position(:,2);
 
 handles.Region.Fascicle.fas_x_original{frame_no} = handles.Region.Fascicle.fas_x{frame_no};
 handles.Region.Fascicle.fas_y_original{frame_no} = handles.Region.Fascicle.fas_y{frame_no};
 
 for i = 1:size(handles.Region,2)
-    handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no};handles.Region(i).Fascicle(j).fas_y{frame_no}]';
+    handles.Region(i).Fascicle(j).current_xy = [handles.Region(i).Fascicle(j).fas_x{frame_no} handles.Region(i).Fascicle(j).fas_y{frame_no}];
 
     if ~isfield(handles.Region(i).Fascicle(j),'analysed_frames')
         handles.Region(i).Fascicle(j).analysed_frames = frame_no;
@@ -2582,7 +2600,7 @@ for i = 1:size(handles.Region,2)
     end
     
     if strcmp(handles.ROItype(1:5), 'Hough')
-        handles.Region(i).Fascicle(j).alpha{frame_no} = geofeatures.alpha;
+        handles.Region(i).Fascicle(j).alpha{frame_no} = atan2d(-diff(handles.h.Position(:,2)), diff(handles.h.Position(:,1)));
     end
 
     handles = calc_fascicle_length_and_pennation(handles,frame_no);
@@ -2590,9 +2608,6 @@ end
 
 % Update handles structure
 guidata(hObject, handles);
-
-% show_image(hObject,handles);
-% show_data(hObject, handles)
 
 function xshiftcor_Callback(hObject, eventdata, handles)
 % hObject    handle to xshiftcor (see GCBO)
@@ -3373,3 +3388,21 @@ function set_Tim_Track_Callback(hObject, eventdata, handles)
 handles.parms = adjust_hough_parameters(handles.parms);
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes on button press in accept_estimate.
+function accept_estimate_Callback(hObject, eventdata, handles)
+% hObject    handle to accept_estimate (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+[handles] = extract_estimates(hObject, eventdata, handles);
+
+delete(handles.h)
+delete(handles.d)
+delete(handles.s)
+
+show_image(hObject, handles);
+
+guidata(hObject, handles);
+
