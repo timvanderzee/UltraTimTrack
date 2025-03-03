@@ -1470,6 +1470,7 @@ if isfield(handles, 'Region')
                     
                     if ~isfield(handles.Region(i), 'fas_length_manual')
                         handles.Region(i).fas_length_manual = zeros(size(FL));
+                        handles.Region(i).fas_pen_manual = zeros(size(FL));
                     end
                     
                     nz2 = logical(handles.Region(i).fas_length_manual ~= 0);
@@ -1483,11 +1484,11 @@ if isfield(handles, 'Region')
 
                     for j = 1:length(handles.Region(i).Fascicle)
 
-                        plot(handles.length_plot,time,FL,'r', time(nz2), FLm, 'yo','linewidth',2);
+                        plot(handles.length_plot,time,FL,'r', time(nz2), FLm, 'mx','linewidth',2);
                         set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                         xlabel('Time (s)'); ylabel('Fascicle Length (mm)');
 
-                        plot(handles.mat_plot,time,PEN,'r', time(nz2), PENm, 'yo','linewidth',2);
+                        plot(handles.mat_plot,time,PEN,'r', time(nz2), PENm, 'mx','linewidth',2);
                         set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                         handles.mat_plot.YLabel.String = 'Fascicle angle (deg)';
                         handles.mat_plot.XLabel.String = 'Time (s)';
@@ -1537,8 +1538,7 @@ if isfield(handles,'ImStack')
                 end
             end
 
-            
-                
+
             % create analyzed frame
             d = round(size(handles.ImStack,2)/2);
 
@@ -1569,10 +1569,10 @@ if isfield(handles,'ImStack')
                 if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
                 % add fascicle
                 currentImage = insertShape(currentImage,'line',[fasx_manual(1)+d, fasy_manual(1), ...
-                fasx_manual(2)+d,fasy_manual(2)], 'LineWidth',5, 'Color','yellow');
+                fasx_manual(2)+d,fasy_manual(2)], 'LineWidth',5, 'Color','magenta');
 
                 currentImage = insertMarker(currentImage,[fasx_manual(1)+d, fasy_manual(1);...
-                fasx_manual(2)+d, fasy_manual(2)], 'o', 'Color','yellow','size',5);
+                fasx_manual(2)+d, fasy_manual(2)], 'o', 'Color','magenta','size',5);
                 end
             end
             
@@ -2292,6 +2292,15 @@ P_plus = nan(size(apo_new_y));
 
 apo_y = [handles.geofeatures(frame_no).super_pos'; handles.geofeatures(frame_no).deep_pos'];
 
+% check whether manual tracking exists
+if isfield(handles.Region(i), 'sup_x_manual')
+    if length(handles.Region(i).sup_x_manual) >= frame_no
+        if ~isempty(handles.Region(i).sup_x_manual{frame_no})
+            apo_y2 = [handles.Region(i).sup_y_manual{frame_no}; handles.Region(i).deep_y_manual{frame_no}];
+        end
+    end
+end
+
 Rs = handles.R(2:end) * .01;
 handles.Region(i).apo_p{handles.start_frame} = Rs;
 
@@ -2308,22 +2317,40 @@ for kk = 1:numel(apo_new_y)
 
     % get the process noise and measurement noise covariance
     s.Q = getQ(handles, dapo);
-    s.R = Rs(kk);
+    R(1) = Rs(kk);
 
     % a priori estimate from optical flow
     s.x_minus = x_minus;
 
     % 'measurement' is from TimTrack
-    s.y = apo_y(kk);
+    y(1) = apo_y(kk);
 
+    if exist('apo_y2','var')
+        y(2) = apo_y2(kk);
+        R(2) = handles.R_manual;
+    end
+    
     % previous state covariance
     s.P_prev = P_prev;
 
     % a posteriori variance estimate
     s.P_minus = s.P_prev + s.Q;
-
+    
     % run kalman filter
-    S = run_kalman_filter(s);
+    for ii = 1:length(y)
+
+        if ii == 2
+            % update
+            s.x_minus = S.x_plus;
+            s.P_minus = S.P_plus;
+        end
+
+        s.y = y(ii);
+        s.R = R(ii);
+
+        S = run_kalman_filter(s);
+
+    end
     
     apo_gain(kk) = S.K;
     apo_plus(kk) = S.x_plus;
@@ -2389,13 +2416,23 @@ P_prev = handles.Region(i).Fascicle(j).fas_p{prev_frame_no};
 % get the process noise and measurement noise covariance
 dx = sqrt((fas_new(2,1)-fas_prev(2,1)).^2 + (fas_new(2,2)-fas_prev(2,2)).^2);
 s.Q = getQ(handles, dx);
-s.R = handles.X;
+R(1) = handles.X;
 
 % a priori estimate from optical flow
 s.x_minus = x_minus(1);
 
 % 'measurement', here is the first value
-s.y = handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2);
+y(1) = handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2);
+
+% if there is a manual estimate, add a second measurement
+if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
+    if length(handles.Region(i).Fascicle(j).fas_x_manual) >= frame_no
+        if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
+            y(2) = handles.Region(i).Fascicle(j).fas_x_manual{frame_no}(2);
+            R(2) = handles.R_manual;
+        end
+    end
+end
 
 % previous state covariance
 s.P_prev = P_prev(1);
@@ -2404,13 +2441,26 @@ s.P_prev = P_prev(1);
 s.P_minus = s.P_prev + s.Q;
 
 % run kalman filter
-S = run_kalman_filter(s);
+for ii = 1:length(y)
+
+    if ii == 2
+        % update
+        s.x_minus = S.x_plus;
+        s.P_minus = S.P_plus;
+    end
+    
+    s.y = y(ii);
+    s.R = R(ii);
+    
+    S = run_kalman_filter(s);
+
+end
 
 % ascribe
 fasx2_plus = S.x_plus;
 fasx2_minus = s.x_minus;
 supP_plus = S.P_plus;
-supP_minus = S.P_minus;
+supP_minus = s.P_minus;
 
 if isinf(handles.Q)
     fasx2_plus = s.y;
@@ -2425,13 +2475,23 @@ end
 dx = abs(dalpha);
 dx(dx<0.005) = 0;
 f.Q = getQ(handles, dx);
-f.R = handles.R(1);
+R(1) = handles.R(1);
 
 % apriori estimate from optical flow
 f.x_minus = x_minus(2);
 
 % measurement from Hough transform
-f.y = handles.geofeatures(frame_no).alpha;
+y(1) = handles.geofeatures(frame_no).alpha;
+
+% if there is a manual estimate, add a second measurement
+if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
+    if length(handles.Region(i).Fascicle(j).fas_x_manual) >= frame_no
+        if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
+            y(2) = handles.Region(i).fas_ang_manual(frame_no);
+            R(2) = handles.R_manual / (pi*handles.Region(i).fas_length_manual(frame_no)*handles.vidHeight/handles.ID) * 180;
+        end
+    end
+end
 
 % previous state covariance
 f.P_prev = P_prev(2);
@@ -2440,14 +2500,27 @@ f.P_prev = P_prev(2);
 f.P_minus = f.P_prev + f.Q;
 
 % run kalman filter
-F = run_kalman_filter(f);
+for ii = 1:length(y)
+
+    if ii == 2
+        % update
+        f.x_minus = F.x_plus;
+        f.P_minus = F.P_plus;
+    end
+    
+    f.y = y(ii);
+    f.R = R(ii);
+    
+    F = run_kalman_filter(f);
+
+end
 
 % ascribe
 alpha_minus = f.x_minus;
 alpha_plus = F.x_plus;
 Kgain = F.K;
 fasP_plus = F.P_plus;
-fasP_minus = F.P_minus;
+fasP_minus = f.P_minus;
 
 if isinf(handles.Q)
     alpha_plus = f.y;
@@ -2552,12 +2625,17 @@ end
 
 handles.Region(i).fas_length(frame_no,j) = (handles.ID/handles.vidHeight)*sqrt(diff(fasx).^2 + diff(fasy).^2);
 
-if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual') && ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
-    fasx = handles.Region(i).Fascicle(j).fas_x_manual{frame_no};
-    fasy = handles.Region(i).Fascicle(j).fas_y_manual{frame_no};
-    
-     handles.Region(i).fas_length_manual(frame_no,j) = (handles.ID/handles.vidHeight)*sqrt(diff(fasx).^2 + diff(fasy).^2);   
-     handles.Region(i).fas_pen_manual(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
+if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
+    if length(handles.Region(i).Fascicle(j).fas_x_manual) >= frame_no
+        if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
+            fasx = handles.Region(i).Fascicle(j).fas_x_manual{frame_no};
+            fasy = handles.Region(i).Fascicle(j).fas_y_manual{frame_no};
+
+             handles.Region(i).fas_length_manual(frame_no,j) = (handles.ID/handles.vidHeight)*sqrt(diff(fasx).^2 + diff(fasy).^2);   
+             handles.Region(i).fas_ang_manual(frame_no,j) = atan2d(-diff(fasy), diff(fasx));
+             handles.Region(i).fas_pen_manual(frame_no,j) = atan2d(-diff(fasy), diff(fasx)) - gamma;
+        end
+    end
 end
 
 
@@ -3424,14 +3502,7 @@ subplot(5,2,i)
 box off
 axis tight
 end
-% %%
-% legendCell = cellstr(num2str(Qs', 'c=%-d'));
-% 
-% subplot(121)
-% legend(legendCell,'location','bestOutside')
-% 
-% subplot(122)
-% legend(legendCell,'location','bestOutside')
+
 
 
 
@@ -3446,9 +3517,9 @@ handles.parms = adjust_hough_parameters(handles.parms);
 guidata(hObject, handles);
 
 
-% --- Executes on button press in accept_estimate.
-function accept_estimate_Callback(hObject, eventdata, handles)
-% hObject    handle to accept_estimate (see GCBO)
+% --- Executes on button press in manual_estimate.
+function manual_estimate_Callback(hObject, eventdata, handles)
+% hObject    handle to manual_estimate (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
@@ -3473,61 +3544,78 @@ if ~isvalid(handles.h)
 else
     
     handles = extract_estimates(hObject, eventdata, handles);
+
+    handles = do_state_estimation(hObject, eventdata, handles);
     delete(handles.h)
     delete(handles.d)
     delete(handles.s)
 end
 
-k.Q = 0;
-k.R = 0;
-
-% Pminus
-k.P_prev = mean(handles.Region.apo_p{1});
-k.x_minus = handles.Region.Fascicle.fas_x{1}(1);
-
-for i = 1:handles.NumFrames
-
-    if ~isempty(handles.Region.Fascicle.fas_x_manual)
-        k.y = handles.Region.Fascicle.fas_x_manual{i}(1);
-        
-        K = run_kalman_filter(k);
-
-        k.x_minus = K.x_plus;
-        k.P_Prev = K.P_plus;
-        
-        fascor(i) = k.x_plus;
-    else
-        fascor(i) = handles.Region.Fascicle.fas_x{i}(1);
-    end
-          
-end
-
-handles.Region.apo_p{1}
 show_data(hObject, handles);
 show_image(hObject, handles);
 
 guidata(hObject, handles);
 
-% function [K] = run_kalman_filter(k)
-% % this assumes we already have the aposteriori state estimate (k.x_minus),
-% % the measurement (k.y) and the process- and measurement noise covariances (k.R and k.Qvalue)
-% 
-% % a posteriori variance estimate
-% K.P_minus = k.P_prev + k.Q;
-% 
-% % kalman xshiftcor
-% K.K = K.P_minus / (K.P_minus + k.R);
-% 
-% if (K.K < 0) || (K.K > 1)
-%     disp('warning: kalman gain outside 0-1 interval');
-% 
-%     K.K(K.K<0) = 0;
-%     K.K(K.K>1) = 1;
-% end
-% 
-% % estimated state
-% K.x_plus = k.x_minus + K.K * (k.y - k.x_minus);
-% 
-% % estimated variance
-% K.P_plus = (1-K.K) * K.P_minus;
+
+function manual_variance_Callback(hObject, eventdata, handles)
+% hObject    handle to manual_variance (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of manual_variance as text
+%        str2double(get(hObject,'String')) returns contents of manual_variance as a double
+
+handles.R_manual = abs(str2double(get(hObject,'String')));
+
+handles = do_state_estimation(hObject, eventdata, handles);
+    
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function manual_variance_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to manual_variance (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+handles.R_manual = abs(str2double(get(hObject,'String')));
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+% --- Executes on button press in clear_manual.
+function clear_manual_Callback(hObject, eventdata, handles)
+% hObject    handle to clear_manual (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+i = 1;
+j = 1;
+
+rmfields = {'sup_x_manual', 'sup_y_manual','deep_x_manual','deep_y_manual','ROIx_manual','ROIy_manual','fas_length_manual','fas_ang_manual','fas_pen_manual'};
+
+for j = 1:length(rmfields)
+    handles.Region(i).(rmfields{j}) = [];
+end
+
+rmfields = {'fas_x_manual','fas_y_manual'};
+for j = 1:length(rmfields)
+    handles.Region(i).Fascicle.(rmfields{j}) = [];
+end
+
+show_data(hObject, handles);
+show_image(hObject, handles);
+
+handles = do_state_estimation(hObject, eventdata, handles);
+
+% Update handles structure
+guidata(hObject, handles);
 
