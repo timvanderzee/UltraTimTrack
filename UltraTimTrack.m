@@ -1333,31 +1333,30 @@ if isfield(handles, 'Region')
             if ~isempty(handles.Region(i).fas_length)
 
                 dt = 1/handles.FrameRate;
-                nz = logical(handles.Region(i).fas_length(:,1) ~= 0);
-                FL = handles.Region(i).fas_length(nz,:);
-                PEN = handles.Region(i).fas_pen(nz,:);
+                FL = handles.Region(i).fas_length;
+                PEN = handles.Region(i).fas_pen;
 
-                if ~isfield(handles.Region(i), 'fas_length_manual')
-                    handles.Region(i).fas_length_manual = zeros(size(FL));
-                    handles.Region(i).fas_pen_manual = zeros(size(FL));
-                end
+%                 if ~isfield(handles.Region(i), 'fas_length_manual')
+%                     handles.Region(i).fas_length_manual = zeros(size(FL));
+%                     handles.Region(i).fas_pen_manual = zeros(size(FL));
+%                 end
 
-                nz2 = logical(handles.Region(i).fas_length_manual ~= 0);
+%                 nz2 = logical(handles.Region(i).fas_length_manual ~= 0);
 
-                FLm = handles.Region(i).fas_length_manual(nz2,:);
-                PENm = handles.Region(i).fas_pen_manual(nz2,:);     
+                FLm = handles.Region(i).fas_length_manual;
+                PENm = handles.Region(i).fas_pen_manual;     
 
-                time = 0:dt:((handles.NumFrames-1)*dt);
+                time = 0:dt:((handles.NumFrames+handles.start_frame-2)*dt);
                 
                 axes(handles.length_plot); 
                 hold off;
-                plot(handles.length_plot,time,FL,'r', time(nz2), FLm, 'mx','linewidth',2);
+                plot(handles.length_plot,time,FL,'r', time, FLm, 'mx','linewidth',2);
                 set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                 xlabel('Time (s)'); 
                 ylabel('Fascicle Length (mm)');
 
                 axes(handles.mat_plot); 
-                plot(handles.mat_plot,time,PEN,'r', time(nz2), PENm, 'mx','linewidth',2);
+                plot(handles.mat_plot,time,PEN,'r', time, PENm, 'mx','linewidth',2);
                 set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
                 xlabel('Time (s)'); 
                 ylabel('Fascicle angle (deg)');
@@ -1505,20 +1504,17 @@ if isfield(handles,'ImStack')
         delete(children(1));
     end
 
-    frames = handles.start_frame:(handles.start_frame + handles.NumFrames-1);
+
     if isfield(handles,'Region')
-        % if length(handles.Region(1).fas_length) == frames(end)
-            FL = handles.Region(1).fas_length(frames);
-            PEN = handles.Region(1).fas_pen(frames);
-        % else
-        %     FL = handles.Region(1).fas_length(:);
-        %     PEN = handles.Region(1).fas_pen(:);
-        % end
+   
+        FL = handles.Region(1).fas_length(:);
+        PEN = handles.Region(1).fas_pen(:);
+
         % add new vertical lines
         dt = 1/handles.FrameRate;
-        time = 0:dt:((handles.NumFrames-1)*dt);
-        line(handles.length_plot, 'xdata', time(frame_no-handles.start_frame+1) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
-        line(handles.mat_plot, 'xdata', time(frame_no-handles.start_frame+1) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
+        time = 0:dt:((handles.NumFrames+handles.start_frame-2)*dt);
+        line(handles.length_plot, 'xdata', time(frame_no) * ones(1,2), 'ydata', [.85*min(FL) 1.15*max(FL)],'color',[0 0 0]);
+        line(handles.mat_plot, 'xdata', time(frame_no) * ones(1,2), 'ydata', [.85*min(PEN) 1.15*max(PEN)],'color', [0 0 0]);
 
     end
 
@@ -2205,14 +2201,14 @@ if frame_no == (handles.start_frame + 1)
         alpha0(k) = handles.geofeatures(k+handles.start_frame-1).alpha;
     end
             
-    handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2) mean(alpha0)];
+    handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x_original{handles.start_frame}(2) mean(alpha0)];
     handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 var(alpha0)];
 
     % if manual is available for first frame, overrule
     if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
         if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual)
-            if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{1})
-                handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x_manual{1}(2) handles.Region(i).fas_ang_manual(1)];
+            if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{handles.start_frame})
+                handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x_manual{handles.start_frame}(2) handles.Region(i).fas_ang_manual(handles.start_frame)];
                 handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 0];
             end
         end
@@ -2477,9 +2473,11 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 % initialize
-N = handles.NumFrames;
+N = handles.NumFrames + handles.start_frame - 1;
 handles.Region(1).fas_length    = nan(N,1);
 handles.Region(1).fas_pen       = nan(N,1);
+handles.Region(1).fas_length_manual    = nan(N,1);
+handles.Region(1).fas_pen_manual       = nan(N,1);
 
 w = handles.vidWidth;
 
@@ -2534,20 +2532,20 @@ Super_intersect_y = polyval(geofeatures.super_coef, Super_intersect_x);
 Deep_intersect_y = polyval(geofeatures.deep_coef, Deep_intersect_x);
 
 i = 1;
-handles.Region(i).sup_x{1} = [1 n]';
-handles.Region(i).sup_y{1} = polyval(geofeatures.super_coef, [1 n]');
+handles.Region(i).sup_x{frame_no} = [1 n]';
+handles.Region(i).sup_y{frame_no} = polyval(geofeatures.super_coef, [1 n]');
 
-handles.Region(i).deep_x{1} = [1 n]';
-handles.Region(i).deep_y{1} = polyval(geofeatures.deep_coef, [1 n]');
+handles.Region(i).deep_x{frame_no} = [1 n]';
+handles.Region(i).deep_y{frame_no} = polyval(geofeatures.deep_coef, [1 n]');
 
-handles.Region(i).ROIx{1} = [1 1 n n 1]';
-handles.Region(i).ROIy{1} = [polyval(geofeatures.super_coef, 1); polyval(geofeatures.deep_coef, [1 n]'); polyval(geofeatures.super_coef, [n 1]')];
+handles.Region(i).ROIx{frame_no} = [1 1 n n 1]';
+handles.Region(i).ROIy{frame_no} = [polyval(geofeatures.super_coef, 1); polyval(geofeatures.deep_coef, [1 n]'); polyval(geofeatures.super_coef, [n 1]')];
 
-handles.Region(i).Fascicle.fas_x{1} = [Deep_intersect_x Super_intersect_x]';
-handles.Region(i).Fascicle.fas_y{1} = [Deep_intersect_y Super_intersect_y]';
+handles.Region(i).Fascicle.fas_x{frame_no} = [Deep_intersect_x Super_intersect_x]';
+handles.Region(i).Fascicle.fas_y{frame_no} = [Deep_intersect_y Super_intersect_y]';
 
-handles.Region.Fascicle.fas_x_original{1} = handles.Region.Fascicle.fas_x{1};
-handles.Region.Fascicle.fas_y_original{1} = handles.Region.Fascicle.fas_y{1};
+handles.Region.Fascicle.fas_x_original{frame_no} = handles.Region.Fascicle.fas_x{1};
+handles.Region.Fascicle.fas_y_original{frame_no} = handles.Region.Fascicle.fas_y{1};
 
 [handles] = calc_fascicle_length_and_pennation(handles,frame_no);
 
@@ -3231,8 +3229,6 @@ axis tight
 end
 
 
-
-
 % --------------------------------------------------------------------
 function set_Tim_Track_Callback(hObject, eventdata, handles)
 % hObject    handle to set_Tim_Track (see GCBO)
@@ -3253,7 +3249,7 @@ function manual_estimate_Callback(hObject, eventdata, handles)
 i = 1;
 j = 1;
 
-frame_no = round(get(handles.frame_slider,'Value')); 
+frame_no = handles.start_frame + round(get(handles.frame_slider,'Value')) - 1; 
 
 if ~isfield(handles, 'Region')
     handles = Auto_Detect_Callback(hObject, eventdata, handles);
@@ -3279,7 +3275,7 @@ else
     try
         handles = do_state_estimation(hObject, eventdata, handles);
     catch
-        disp('No tracking data yet')
+        disp('No tracking yet')
     end
     
     delete(handles.h)
@@ -3307,8 +3303,15 @@ function manual_variance_Callback(hObject, eventdata, handles)
 
 handles.R_manual = abs(str2double(get(hObject,'String')));
 
-handles = do_state_estimation(hObject, eventdata, handles);
-    
+try
+    handles = do_state_estimation(hObject, eventdata, handles);
+catch   
+    disp('No tracking yet')
+end
+
+show_data(hObject, handles);
+show_image(hObject, handles);
+
 % Update handles structure
 guidata(hObject, handles);
 
@@ -3340,7 +3343,11 @@ function clear_manual_Callback(hObject, eventdata, handles)
 i = 1;
 j = 1;
 
-rmfields = {'sup_x_manual', 'sup_y_manual','deep_x_manual','deep_y_manual','ROIx_manual','ROIy_manual','fas_length_manual','fas_ang_manual','fas_pen_manual'};
+N = handles.NumFrames + handles.start_frame - 1;
+handles.Region(i).fas_length_manual    = nan(N,1);
+handles.Region(i).fas_pen_manual       = nan(N,1);
+
+rmfields = {'sup_x_manual', 'sup_y_manual','deep_x_manual','deep_y_manual','ROIx_manual','ROIy_manual','fas_ang_manual'};
 
 for j = 1:length(rmfields)
     handles.Region(i).(rmfields{j}) = [];
@@ -3354,7 +3361,11 @@ end
 show_data(hObject, handles);
 show_image(hObject, handles);
 
-handles = do_state_estimation(hObject, eventdata, handles);
+try
+    handles = do_state_estimation(hObject, eventdata, handles);
+catch
+    disp('No tracking yet')
+end
 
 % Update handles structure
 guidata(hObject, handles);
