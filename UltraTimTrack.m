@@ -2204,10 +2204,20 @@ if frame_no == (handles.start_frame + 1)
     for k = 1:handles.NS % number of starting frames
         alpha0(k) = handles.geofeatures(k+handles.start_frame-1).alpha;
     end
-
+            
     handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2) mean(alpha0)];
     handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 var(alpha0)];
 
+    % if manual is available for first frame, overrule
+    if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
+        if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual)
+            if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{1})
+                handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x_manual{1}(2) handles.Region(i).fas_ang_manual(1)];
+                handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 0];
+            end
+        end
+    end
+    
     % a priori is the same as a positeriori
     handles.Region(i).Fascicle(j).fas_p_minus{handles.start_frame} = handles.Region(i).Fascicle(j).fas_p{handles.start_frame};
     handles.Region(i).Fascicle(j).X_minus{handles.start_frame} = handles.Region(i).Fascicle(j).X_plus{handles.start_frame};
@@ -3245,7 +3255,11 @@ j = 1;
 
 frame_no = round(get(handles.frame_slider,'Value')); 
 
-if ~isvalid(handles.h)
+if ~isfield(handles, 'Region')
+    handles = Auto_Detect_Callback(hObject, eventdata, handles);
+end
+
+if ~isfield(handles, 'h')
     Supex = handles.Region(i).sup_x{frame_no};
     Supey = handles.Region(i).sup_y{frame_no};
     Deepx = handles.Region(i).deep_x{frame_no};
@@ -3262,10 +3276,19 @@ else
     
     handles = extract_estimates(hObject, eventdata, handles);
 
-    handles = do_state_estimation(hObject, eventdata, handles);
+    try
+        handles = do_state_estimation(hObject, eventdata, handles);
+    catch
+        disp('No tracking data yet')
+    end
+    
     delete(handles.h)
     delete(handles.d)
     delete(handles.s)
+    
+    handles = rmfield(handles, 'h');
+    handles = rmfield(handles, 'd');
+    handles = rmfield(handles, 's');
 end
 
 show_data(hObject, handles);
