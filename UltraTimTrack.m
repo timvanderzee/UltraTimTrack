@@ -1470,6 +1470,7 @@ if isfield(handles, 'Region')
                     
                     if ~isfield(handles.Region(i), 'fas_length_manual')
                         handles.Region(i).fas_length_manual = zeros(size(FL));
+                        handles.Region(i).fas_pen_manual = zeros(size(FL));
                     end
                     
                     nz2 = logical(handles.Region(i).fas_length_manual ~= 0);
@@ -2410,7 +2411,7 @@ S = run_kalman_filter(s);
 fasx2_plus = S.x_plus;
 fasx2_minus = s.x_minus;
 supP_plus = S.P_plus;
-supP_minus = S.P_minus;
+supP_minus = s.P_minus;
 
 if isinf(handles.Q)
     fasx2_plus = s.y;
@@ -2447,7 +2448,7 @@ alpha_minus = f.x_minus;
 alpha_plus = F.x_plus;
 Kgain = F.K;
 fasP_plus = F.P_plus;
-fasP_minus = F.P_minus;
+fasP_minus = f.P_minus;
 
 if isinf(handles.Q)
     alpha_plus = f.y;
