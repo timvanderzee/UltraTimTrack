@@ -2277,7 +2277,7 @@ function[handles] = state_estimator(handles,frame_no,prev_frame_no)
 i = 1; j = 1;
 
 % if the second frame, we need to calculate the first frame
-if frame_no == (handles.start_frame + 1) && ~isfield(handles.Region,'fas_ang')
+if frame_no == (handles.start_frame + 1) % && ~isfield(handles.Region,'fas_ang')
 
     alpha0 = nan(1,handles.NS);
 
@@ -2311,15 +2311,15 @@ if frame_no == (handles.start_frame + 1) && ~isfield(handles.Region,'fas_ang')
 
 else
 
-    if isfield(handles.Region,'fas_ang')
-
-        handles.Region(1).Fascicle(1).alpha{handles.start_frame} = handles.Region(1).fas_ang(handles.start_frame);
-        handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2) handles.Region(1).fas_ang(handles.start_frame)];
-        handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 var(handles.Region(1).fas_ang(handles.start_frame))];
-        handles.Region(i).Fascicle(j).fas_p_minus{handles.start_frame} = handles.Region(i).Fascicle(j).fas_p{handles.start_frame};
-        handles.Region(i).Fascicle(j).X_minus{handles.start_frame} = handles.Region(i).Fascicle(j).X_plus{handles.start_frame};
-
-    end
+%     if isfield(handles.Region,'fas_ang')
+% 
+%         handles.Region(1).Fascicle(1).alpha{handles.start_frame} = handles.Region(1).fas_ang(handles.start_frame);
+%         handles.Region(i).Fascicle(j).X_plus{handles.start_frame} = [handles.Region(i).Fascicle(j).fas_x{handles.start_frame}(2) handles.Region(1).fas_ang(handles.start_frame)];
+%         handles.Region(i).Fascicle(j).fas_p{handles.start_frame} = [0 var(handles.Region(1).fas_ang(handles.start_frame))];
+%         handles.Region(i).Fascicle(j).fas_p_minus{handles.start_frame} = handles.Region(i).Fascicle(j).fas_p{handles.start_frame};
+%         handles.Region(i).Fascicle(j).X_minus{handles.start_frame} = handles.Region(i).Fascicle(j).X_plus{handles.start_frame};
+% 
+%     end
 
 end
 
@@ -3376,6 +3376,23 @@ function manual_estimate_Callback(hObject, eventdata, handles)
 % hObject    handle to manual_estimate (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+if isfield(handles,'h')
+    if ~isvalid(handles.h)
+        handles = rmfield(handles, 'h');
+    end
+end
+if isfield(handles,'d')
+    if ~isvalid(handles.d)
+        handles = rmfield(handles, 'd');
+    end
+end
+if isfield(handles,'s')
+    if ~isvalid(handles.s)
+        handles = rmfield(handles, 's');
+    end
+end
+
 try
     i = 1;
     j = 1;
@@ -3386,7 +3403,7 @@ try
         handles = Auto_Detect_Callback(hObject, eventdata, handles);
     end
     
-    if ~isfield(handles, 'h')
+    if ~isfield(handles, 'h') || ~isfield(handles, 'd') || ~isfield(handles, 's')
         Supex = handles.Region(i).sup_x{frame_no};
         Supey = handles.Region(i).sup_y{frame_no};
         Deepx = handles.Region(i).deep_x{frame_no};
