@@ -3326,7 +3326,7 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
                 if handles.trackbck_chkBox.Value == 0
                     handles = process_all_UltraTrack(hObject, eventdata, handles);
                 else
-                    handles = dLcrit_UltraTrack_backwards(hObject, eventdata, handles);
+                    handles = process_all_UltraTrack_backwards(hObject, eventdata, handles);
                 end
                 %try estimation (depending on hough tracked or not
                 try
