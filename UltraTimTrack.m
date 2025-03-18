@@ -653,7 +653,11 @@ if isfield(handles,'ImStack')
     if isfield(handles,'Region')
         handles = rmfield(handles,'Region');
     end
-
+    
+    if isfield(handles,'geofeatures')
+        handles = rmfield(handles, 'geofeatures');
+    end
+     
     % set current frame to 1
     set(handles.frame_slider,'Value',1);
     set(handles.frame_number,'String',1);
@@ -807,6 +811,14 @@ end
 set(handles.S, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 set(handles.D, 'EdgeAlpha',0,'FaceAlpha',0.1,'InteractionsAllowed','none')
 
+% update parms
+handles.parms.apo.super.cut = [handles.S.Position(2) handles.S.Position(2)+handles.S.Position(4)] / handles.vidHeight;
+handles.parms.apo.deep.cut = [handles.D.Position(2) handles.D.Position(2)+handles.D.Position(4)] / handles.vidHeight;
+
+% clear everything
+if isfield(handles, 'geofeatures')
+    handles = rmfield(handles, 'geofeatures');
+end
 
 if isfield(handles,'ImStack')
 
@@ -814,48 +826,33 @@ if isfield(handles,'ImStack')
     frame_no = round(get(handles.frame_slider,'Value'))+handles.start_frame-1;
     if isempty(fileFas)
         [fname, pname] = uigetfile('*.mat','Load tracking MAT file');
-        load([pname fname]);
+        load([pname fname],'Fdat');
     else
-        load(fileFas);
+        load(fileFas,'Fdat');
     end
     
     %just be sure such necessary data exists
-    if exist('Fdat','var') && isfield(Fdat,'Region') && isfield(Fdat.Region,'Fascicle')
-
+    if exist('Fdat','var')
         for i = 1:length(Fdat.Region)
-
             for k = 1:length(Fdat.Region(i).Fascicle)
 
-                handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x;
-                handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y;
+                handles.geofeatures(frame_no) = Fdat.geofeatures(frame_no);
 
-                %in case some wants to load a single fascicle from a series
-                %tracked
-                handles.Region(i).Fascicle(k).current_xy(1,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(1);
-                handles.Region(i).Fascicle(k).current_xy(1,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(1);
-                handles.Region(i).Fascicle(k).current_xy(2,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(2);
-                handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
+                handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{frame_no};
+                handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{frame_no};
                 
-                %Add ROI data
-                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
-                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
+                handles.Region(i).Fascicle(k).fas_x_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{frame_no};
+                handles.Region(i).Fascicle(k).fas_y_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{frame_no};
 
-                try
-                    handles.Region(i).deep_x{frame_no} =  Fdat.Region(i).deep_x ;
-                    handles.Region(i).deep_y{frame_no} =  Fdat.Region(i).deep_y ;
-                    handles.Region(i).sup_x{frame_no} =   Fdat.Region(i).sup_x ;
-                    handles.Region(i).sup_y{frame_no} =  Fdat.Region(i).sup_y ;
-                catch
-                    fprintf('Apo pts defined by ROI because not specify in the loaded fascicle file!\n')
-                    handles.Region(i).deep_x{frame_no} =  Fdat.Region(i).ROIx([2,3]);
-                    handles.Region(i).deep_y{frame_no}=  Fdat.Region(i).ROIy([2,3]);
-                    handles.Region(i).sup_x{frame_no} =  Fdat.Region(i).ROIx([end,end-1]);
-                    handles.Region(i).sup_y{frame_no} =  Fdat.Region(i).ROIy([end,end-1]);
-                end
-                % handles.Region(i).fas_pen(frame_no,k) = atan2d(abs(diff(handles.Region(i).Fascicle(k).fas_y{frame_no})),abs(diff(handles.Region(i).Fascicle(k).fas_x{frame_no})));
-                % scalar = handles.ID;%/handles.vidHeight;
-                % handles.Region(i).fas_length(frame_no,k) = scalar*sqrt(diff(handles.Region(i).Fascicle(k).fas_y{frame_no}).^2 + diff(handles.Region(i).Fascicle(k).fas_x{frame_no}).^2);
-                % calculate fascicle length and penn
+                handles.Region(i).sup_x{frame_no} = Fdat.Region(i).sup_x{frame_no};
+                handles.Region(i).sup_y{frame_no} = Fdat.Region(i).sup_y{frame_no};
+
+                handles.Region(i).deep_x{frame_no} = Fdat.Region(i).deep_x{frame_no};
+                handles.Region(i).deep_y{frame_no} = Fdat.Region(i).deep_y{frame_no};
+ 
+                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx{frame_no};
+                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy{frame_no};
+
                 handles = calc_fascicle_length_and_pennation(handles,frame_no);
 
                 if ~isfield(handles.Region(i).Fascicle(k),'analysed_frames')
@@ -863,12 +860,13 @@ if isfield(handles,'ImStack')
                 else
                     handles.Region(i).Fascicle(k).analysed_frames = sort([handles.Region(i).Fascicle(k).analysed_frames frame_no]);
                 end
+
             end
 
+            %             Nfascicle(i) = length(handles.Region(i).Fascicle);
 
         end
 
-      
     else
 
         warndlg('Fascicle data not found','ERROR')
@@ -895,23 +893,29 @@ if isfield(handles,'movObj')||isfield(handles,'BIm')||isfield(handles,'ImStack')
     
                 if isfield(handles.Region(i).Fascicle(k),'fas_x')
     
-                    Fdat.Region(i).Fascicle(k).fas_x = handles.Region(i).Fascicle(k).fas_x{frame_no};
-                    Fdat.Region(i).Fascicle(k).fas_y = handles.Region(i).Fascicle(k).fas_y{frame_no};
+                    Fdat.Region(i).Fascicle(k).fas_x{frame_no} = handles.Region(i).Fascicle(k).fas_x{frame_no};
+                    Fdat.Region(i).Fascicle(k).fas_y{frame_no} = handles.Region(i).Fascicle(k).fas_y{frame_no};
     
                 end
     
             end
+            
+            % Save geofeatures
+            Fdat.geofeatures(frame_no) = handles.geofeatures(frame_no);
+            
             % Save apo data (OK)
-            Fdat.Region(i).sup_x = handles.Region(i).sup_x{frame_no};
-            Fdat.Region(i).sup_y = handles.Region(i).sup_y{frame_no};
-            Fdat.Region(i).deep_x = handles.Region(i).deep_x{frame_no};
-            Fdat.Region(i).deep_y = handles.Region(i).deep_y{frame_no};
+            Fdat.Region(i).sup_x{frame_no} = handles.Region(i).sup_x{frame_no};
+            Fdat.Region(i).sup_y{frame_no} = handles.Region(i).sup_y{frame_no};
+            Fdat.Region(i).deep_x{frame_no} = handles.Region(i).deep_x{frame_no};
+            Fdat.Region(i).deep_y{frame_no} = handles.Region(i).deep_y{frame_no};
+            
             % Save fascicle length and pennation
-            Fdat.Region(i).fas_length = handles.Region(i).fas_length(frame_no);
-            Fdat.Region(i).fas_pen = handles.Region(i).fas_pen(frame_no);
+            Fdat.Region(i).fas_length(frame_no) = handles.Region(i).fas_length(frame_no);
+            Fdat.Region(i).fas_pen(frame_no) = handles.Region(i).fas_pen(frame_no);
+            
             % Also save the ROI data
-            Fdat.Region(i).ROIx = handles.Region(i).ROIx{frame_no};
-            Fdat.Region(i).ROIy = handles.Region(i).ROIy{frame_no};
+            Fdat.Region(i).ROIx{frame_no} = handles.Region(i).ROIx{frame_no};
+            Fdat.Region(i).ROIy{frame_no} = handles.Region(i).ROIy{frame_no};
             %Fdat.Region(i).ROI = handles.Region(i).ROIp{frame_no};
         end
     
@@ -1372,7 +1376,7 @@ if isfield(handles, 'Region')
                 dt = 1/handles.FrameRate;
                 FL = handles.Region(i).fas_length;
                 PEN = handles.Region(i).fas_pen;
-                time = 0:dt:((handles.NumFrames+handles.start_frame-2)*dt);
+                time = 0:dt:((length(FL)-1)*dt);
                 
                 if ~isfield(handles.Region(i), 'fas_length_manual')
                     handles.Region(i).fas_length_manual = nan(size(time));
@@ -1414,7 +1418,7 @@ if isfield(handles,'ImStack')
     j = 1;
 
     if isfield(handles, 'Region')
-        if length(handles.Region(i).Fascicle(j).fas_x) >= frame_no
+        if isfinite(handles.Region(i).fas_length(frame_no))
             f = frame_no;
 
             fasx = handles.Region(i).Fascicle(j).fas_x{f};
@@ -1487,10 +1491,11 @@ if isfield(handles,'ImStack')
             % save
             ImTrack = currentImage;
 
-            % show region
+%            show region
+            if isvalid(handles.S)
             set(handles.S, 'Position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.super.cut)*handles.vidHeight])
             set(handles.D, 'Position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight floor(handles.vidWidth/2) diff(handles.parms.apo.deep.cut)*handles.vidHeight])
-
+            end
         end
     end
 
@@ -1916,7 +1921,7 @@ handles.ProcessingTime(2) = toc(tstart);
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
 % run TimTrack on all frames
-frames = (handles.start_frame+1):(handles.start_frame + handles.NumFrames-1);
+frames = (handles.start_frame):(handles.start_frame + handles.NumFrames-1);
 numIterations = length(frames);
 
 parms = handles.parms;
@@ -1924,7 +1929,9 @@ parms.extrapolation = 1;
 
 n = handles.vidWidth;
 
-
+% get the first from auto_detect
+geofeatures(handles.start_frame) = handles.geofeatures(handles.start_frame);
+    
 if isfield(handles,'ImStack')
     im2 = imresize(handles.ImStack, 1/handles.imresize_fac);
 
@@ -1962,7 +1969,7 @@ if isfield(handles,'ImStack')
                 WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...');
 
                 tstart = tic;
-                parfor f = frames
+                parfor f = frames(2:end)
                     geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                     WaitMessage.Send; %update waitbar parfor
                 end
@@ -1974,7 +1981,7 @@ if isfield(handles,'ImStack')
                 %single thread for loop
                 tstart = tic;
                 hwb = waitbar(0,'','Name','Running TimTrack...');
-                for f = frames
+                for f = frames(2:end)
 
                     geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                     waitbar((f-handles.start_frame) / numIterations, hwb, sprintf('Processing frame %d/%d', (f-handles.start_frame), numIterations)); %maybe numIterations +1 on bar, but not sure for cutting frames
@@ -1985,17 +1992,20 @@ if isfield(handles,'ImStack')
             end
 
             % Adjust the parameter of geofeatures
-            for kk = frames
-                geofeatures(kk).fas_coef(2)     = geofeatures(kk).fas_coef(2) * handles.imresize_fac;
-                geofeatures(kk).super_coef(2)   = geofeatures(kk).super_coef(2) * handles.imresize_fac;
-                geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
-                geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
-                geofeatures(kk).faslen          = geofeatures(kk).faslen * handles.imresize_fac;
+            for kk = frames(1:end)
+                
+                if kk > frames(1)
+                    geofeatures(kk).fas_coef(2)     = geofeatures(kk).fas_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).super_coef(2)   = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
+                    geofeatures(kk).faslen          = geofeatures(kk).faslen * handles.imresize_fac;
+                end
 
                 % get vertical locations at image boundaries
                 geofeatures(kk).super_pos = polyval(geofeatures(kk).super_coef, [1 n]);
                 geofeatures(kk).deep_pos = polyval(geofeatures(kk).deep_coef, [1 n]);
-
+                
                 % calculate fascicle
                 Deep_intersect_x = round((geofeatures(kk).deep_coef(2) - geofeatures(kk).fas_coef(2))   ./ (geofeatures(kk).fas_coef(1) - geofeatures(kk).deep_coef(1)));
                 Super_intersect_x = round((geofeatures(kk).super_coef(2) - geofeatures(kk).fas_coef(2)) ./ (geofeatures(kk).fas_coef(1) - geofeatures(kk).super_coef(1)));
@@ -2011,21 +2021,18 @@ if isfield(handles,'ImStack')
                 handles.Region(i).ROIx{kk} = [1 1 n n 1]';
                 handles.Region(i).ROIy{kk} = [polyval(geofeatures(kk).super_coef, 1); polyval(geofeatures(kk).deep_coef, [1 n]'); polyval(geofeatures(kk).super_coef, [n 1]')];
 
-                handles.Region.Fascicle.fas_x{kk} = [Deep_intersect_x Super_intersect_x]';
-                handles.Region.Fascicle.fas_y{kk} = [Deep_intersect_y Super_intersect_y]';
+                if kk > frames(1)
+                    handles.Region.Fascicle.fas_x{kk} = [Deep_intersect_x Super_intersect_x]';
+                    handles.Region.Fascicle.fas_y{kk} = [Deep_intersect_y Super_intersect_y]';
 
-                handles.Region.Fascicle.fas_x_original{kk} = handles.Region.Fascicle.fas_x{kk};
-                handles.Region.Fascicle.fas_y_original{kk} = handles.Region.Fascicle.fas_y{kk};
+                    handles.Region.Fascicle.fas_x_original{kk} = handles.Region.Fascicle.fas_x{kk};
+                    handles.Region.Fascicle.fas_y_original{kk} = handles.Region.Fascicle.fas_y{kk};
+                end
 
             end
 
             handles.geofeatures = geofeatures;
         end
-        
-        % get the first from auto_detect
-        geofeatures(handles.start_frame) = handles.geofeatures(handles.start_frame);
-        
-        handles.geofeatures = geofeatures;
     end
 end
 
@@ -2757,8 +2764,8 @@ geofeatures.deep_coef(2) = geofeatures.deep_coef(2)       .* [handles.imresize_f
 geofeatures.fas_coef(2) = geofeatures.fas_coef(2)         .* [handles.imresize_fac];
 
 n = handles.vidWidth;
-geofeatures.super_pos = polyval(geofeatures.super_coef, [1 n]);
-geofeatures.deep_pos = polyval(geofeatures.deep_coef, [1 n]);
+% geofeatures.super_pos = polyval(geofeatures.super_coef, [1 n]);
+% geofeatures.deep_pos = polyval(geofeatures.deep_coef, [1 n]);
 
 % save geofeatures
 handles.geofeatures = geofeatures;
@@ -3319,7 +3326,7 @@ if sum(tmp ~= handles.BlockSize) ~= 0 %if the Block changed, then check and run 
                 if handles.trackbck_chkBox.Value == 0
                     handles = process_all_UltraTrack(hObject, eventdata, handles);
                 else
-                    handles = process_all_UltraTrack_backwards(hObject, eventdata, handles);
+                    handles = dLcrit_UltraTrack_backwards(hObject, eventdata, handles);
                 end
                 %try estimation (depending on hough tracked or not
                 try
@@ -3567,6 +3574,10 @@ try
         if frame_no == handles.start_frame
             handles.Region(i).Fascicle(j).fas_x{frame_no} = handles.Region(i).Fascicle(j).fas_x_manual{frame_no};
             handles.Region(i).Fascicle(j).fas_y{frame_no} = handles.Region(i).Fascicle(j).fas_y_manual{frame_no};
+            
+            handles.Region(i).Fascicle(j).fas_x_original{frame_no} = handles.Region(i).Fascicle(j).fas_x_manual{frame_no};
+            handles.Region(i).Fascicle(j).fas_y_original{frame_no} = handles.Region(i).Fascicle(j).fas_y_manual{frame_no};
+            
         end
         
         handles = calc_fascicle_length_and_pennation(handles,frame_no);
