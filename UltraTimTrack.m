@@ -835,6 +835,7 @@ if isfield(handles,'ImStack')
                 handles.Region(i).Fascicle(k).current_xy(1,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(1);
                 handles.Region(i).Fascicle(k).current_xy(2,1) = handles.Region(i).Fascicle(k).fas_x{frame_no}(2);
                 handles.Region(i).Fascicle(k).current_xy(2,2) = handles.Region(i).Fascicle(k).fas_y{frame_no}(2);
+                
                 %Add ROI data
                 handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx;
                 handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy;
@@ -1576,6 +1577,7 @@ else
     set(handles.frame_slider,'Value',frame_no);
     set(handles.frame_number,'String',num2str(handles.NumFrames));
 end 
+
 % Update handles structure
 guidata(hObject, handles);
 %update image so people have a feedback regarding forward/and or backward
@@ -1914,7 +1916,7 @@ handles.ProcessingTime(2) = toc(tstart);
 function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
 % run TimTrack on all frames
-frames = (handles.start_frame):(handles.start_frame + handles.NumFrames-1);
+frames = (handles.start_frame+1):(handles.start_frame + handles.NumFrames-1);
 numIterations = length(frames);
 
 parms = handles.parms;
@@ -3558,9 +3560,17 @@ try
         handles.s = drawline('Position', [Supex(1)+d Supey(1); Supex(2)+d Supey(2)], 'color', 'blue', 'linewidth',2,'StripeColor','w');
         handles.d = drawline('Position', [Deepx(1)+d Deepy(1); Deepx(2)+d Deepy(2)], 'color', 'green', 'linewidth',2,'StripeColor','w');
     else
-    
+        
         handles = extract_estimates(hObject, eventdata, handles);
     
+        % if the first frame, accept manual tracking
+        if frame_no == handles.start_frame
+            handles.Region(i).Fascicle(j).fas_x{frame_no} = handles.Region(i).Fascicle(j).fas_x_manual{frame_no};
+            handles.Region(i).Fascicle(j).fas_y{frame_no} = handles.Region(i).Fascicle(j).fas_y_manual{frame_no};
+        end
+        
+        handles = calc_fascicle_length_and_pennation(handles,frame_no);
+
         try
             handles = do_state_estimation(hObject, eventdata, handles);
         catch
