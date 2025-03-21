@@ -826,7 +826,14 @@ if isfield(handles,'ImStack')
     frame_no = round(get(handles.frame_slider,'Value'))+handles.start_frame-1;
     if isempty(fileFas)
         [fname, pname] = uigetfile('*.mat','Load tracking MAT file');
-        load([pname fname],'Fdat');
+        if fname == 0
+            %make trasparent
+            set(handles.S, 'EdgeAlpha',1,'FaceAlpha',0.2,'InteractionsAllowed','all')
+            set(handles.D, 'EdgeAlpha',1,'FaceAlpha',0.2,'InteractionsAllowed','all')
+            return
+        else
+            load([pname fname],'Fdat');
+        end
     else
         load(fileFas,'Fdat');
     end
@@ -836,22 +843,26 @@ if isfield(handles,'ImStack')
         for i = 1:length(Fdat.Region)
             for k = 1:length(Fdat.Region(i).Fascicle)
 
-                handles.geofeatures(frame_no) = Fdat.geofeatures(frame_no);
+                if isfield(Fdat,'geofeatures') %in case someone do not save the parameters with save fascicle but retrieve them (e.g., they used only optic flow for tracking)
 
-                handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{frame_no};
-                handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{frame_no};
+                    handles.geofeatures(frame_no) = Fdat.geofeatures(1);%1 because there is single data /fascicle saved                                
+                else
+                    fprintf('No geofeatures loaded, you can tracked the loaded fascicle only via opticflow,\notherwise points will be overwritten by autdetect\n')
+                end
+                handles.Region(i).Fascicle(k).fas_x{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{1};
+                handles.Region(i).Fascicle(k).fas_y{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{1};
                 
-                handles.Region(i).Fascicle(k).fas_x_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{frame_no};
-                handles.Region(i).Fascicle(k).fas_y_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{frame_no};
+                handles.Region(i).Fascicle(k).fas_x_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_x{1};
+                handles.Region(i).Fascicle(k).fas_y_original{frame_no} = Fdat.Region(i).Fascicle(k).fas_y{1};
 
-                handles.Region(i).sup_x{frame_no} = Fdat.Region(i).sup_x{frame_no};
-                handles.Region(i).sup_y{frame_no} = Fdat.Region(i).sup_y{frame_no};
+                handles.Region(i).sup_x{frame_no} = Fdat.Region(i).sup_x{1};
+                handles.Region(i).sup_y{frame_no} = Fdat.Region(i).sup_y{1};
 
-                handles.Region(i).deep_x{frame_no} = Fdat.Region(i).deep_x{frame_no};
-                handles.Region(i).deep_y{frame_no} = Fdat.Region(i).deep_y{frame_no};
+                handles.Region(i).deep_x{frame_no} = Fdat.Region(i).deep_x{1};
+                handles.Region(i).deep_y{frame_no} = Fdat.Region(i).deep_y{1};
  
-                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx{frame_no};
-                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy{frame_no};
+                handles.Region(i).ROIx{frame_no} = Fdat.Region(i).ROIx{1};
+                handles.Region(i).ROIy{frame_no} = Fdat.Region(i).ROIy{1};
 
                 handles = calc_fascicle_length_and_pennation(handles,frame_no);
 
@@ -1575,7 +1586,6 @@ if handles.trackbck_chkBox.Value == 0
     frame_no = 1;%handles.start_frame;
     set(handles.frame_slider,'Value',frame_no);
     set(handles.frame_number,'String',num2str(frame_no));
-
 else
 
     frame_no = handles.NumFrames;
@@ -1922,6 +1932,16 @@ function[handles] = process_all_TimTrack(hObject, eventdata, handles)
 
 % run TimTrack on all frames
 frames = (handles.start_frame):(handles.start_frame + handles.NumFrames-1);
+% Check the value of the checkbox
+if handles.trackbck_chkBox.Value
+    % get the first (or better last frame) from auto_detect
+    geofeatures(handles.NumFrames+handles.start_frame-1) = handles.geofeatures(handles.NumFrames+handles.start_frame-1);
+   
+else
+    % get the first from auto_detect
+    geofeatures(handles.start_frame) = handles.geofeatures(handles.start_frame);
+   
+end
 numIterations = length(frames);
 
 parms = handles.parms;
@@ -1929,9 +1949,7 @@ parms.extrapolation = 1;
 
 n = handles.vidWidth;
 
-% get the first from auto_detect
-geofeatures(handles.start_frame) = handles.geofeatures(handles.start_frame);
-    
+ 
 if isfield(handles,'ImStack')
     im2 = imresize(handles.ImStack, 1/handles.imresize_fac);
 
@@ -1963,13 +1981,20 @@ if isfield(handles,'ImStack')
 
     if ~strcmp(answer,'Cancel')
         for i = 1:length(handles.Region)
+            frames_to_track = frames(2:end) -  handles.trackbck_chkBox.Value;
+
             % TimTrack (parfor or for)
             if handles.do_parfor.Value
                 % Then construct a ParforProgressbar object:
                 WaitMessage = parfor_wait(numIterations,'Waitbar', true,'Title','Running TimTrack...');
 
                 tstart = tic;
-                parfor f = frames(2:end)
+
+                parfor f = frames_to_track %based on frames and backwards adjustment up 
+                    %f - handles.trackbck_chkBox.Value because if backwards
+                    %also frame 1, can't do f-handles.trackbck_chkBox.Value
+                    %because it's a parfor
+                    
                     geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                     WaitMessage.Send; %update waitbar parfor
                 end
@@ -1981,8 +2006,8 @@ if isfield(handles,'ImStack')
                 %single thread for loop
                 tstart = tic;
                 hwb = waitbar(0,'','Name','Running TimTrack...');
-                for f = frames(2:end)
-
+                for f = frames_to_track%frames(2:end)
+                    %f - handles.trackbck_chkBox.Value because if backwards also frame 1, otherwise no
                     geofeatures(f) = auto_ultrasound(im2(:,:,f), parms);
                     waitbar((f-handles.start_frame) / numIterations, hwb, sprintf('Processing frame %d/%d', (f-handles.start_frame), numIterations)); %maybe numIterations +1 on bar, but not sure for cutting frames
 
@@ -1994,12 +2019,21 @@ if isfield(handles,'ImStack')
             % Adjust the parameter of geofeatures
             for kk = frames(1:end)
                 
-                if kk > frames(1)
+                if kk > frames(1)  && ~handles.trackbck_chkBox.Value
                     geofeatures(kk).fas_coef(2)     = geofeatures(kk).fas_coef(2) * handles.imresize_fac;
-                    geofeatures(kk).super_coef(2)   = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+                    %geofeatures(kk).super_lccoef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).super_coef(2)   =  geofeatures(kk).super_coef(2) * handles.imresize_fac;
                     geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
                     geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
                     geofeatures(kk).faslen          = geofeatures(kk).faslen * handles.imresize_fac;
+                elseif kk < frames(end) && handles.trackbck_chkBox.Value
+                    geofeatures(kk).fas_coef(2)     = geofeatures(kk).fas_coef(2) * handles.imresize_fac;
+                    %geofeatures(kk).super_lccoef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).super_coef(2) = geofeatures(kk).super_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).deep_coef(2)    = geofeatures(kk).deep_coef(2) * handles.imresize_fac;
+                    geofeatures(kk).thickness       = geofeatures(kk).thickness * handles.imresize_fac;
+                    geofeatures(kk).faslen          = geofeatures(kk).faslen * handles.imresize_fac;
+             
                 end
 
                 % get vertical locations at image boundaries
@@ -2021,8 +2055,15 @@ if isfield(handles,'ImStack')
                 handles.Region(i).ROIx{kk} = [1 1 n n 1]';
                 handles.Region(i).ROIy{kk} = [polyval(geofeatures(kk).super_coef, 1); polyval(geofeatures(kk).deep_coef, [1 n]'); polyval(geofeatures(kk).super_coef, [n 1]')];
 
-                if kk > frames(1)
+                if kk > frames(1) && ~handles.trackbck_chkBox.Value
                     handles.Region.Fascicle.fas_x{kk} = [Deep_intersect_x Super_intersect_x]';
+                    handles.Region.Fascicle.fas_y{kk} = [Deep_intersect_y Super_intersect_y]';
+
+                    handles.Region.Fascicle.fas_x_original{kk} = handles.Region.Fascicle.fas_x{kk};
+                    handles.Region.Fascicle.fas_y_original{kk} = handles.Region.Fascicle.fas_y{kk};
+
+                elseif kk <  frames(end) && handles.trackbck_chkBox.Value
+                   handles.Region.Fascicle.fas_x{kk} = [Deep_intersect_x Super_intersect_x]';
                     handles.Region.Fascicle.fas_y{kk} = [Deep_intersect_y Super_intersect_y]';
 
                     handles.Region.Fascicle.fas_x_original{kk} = handles.Region.Fascicle.fas_x{kk};
@@ -2079,62 +2120,61 @@ if ~isnan(handles.Q)
     handles = estimate_variance(hObject, eventdata, handles);
 
     if handles.trackbck_chkBox.Value == 0
-    %%here they are for normal forward  Optic flow tracking
-    % forward state estimation
-    for f = (handles.start_frame+1):length(handles.geofeatures)
-        for i = 1:length(handles.Region)
-            for j = 1:length(handles.Region(i).Fascicle)
-                % state estimation
-                handles = apo_state_estimator(handles,f,f-1);
+        %%here they are for normal forward  Optic flow tracking
+        % forward state estimation
+         for f = (handles.start_frame+1):length(handles.geofeatures)
+            for i = 1:length(handles.Region)
+                for j = 1:length(handles.Region(i).Fascicle)
+                    % state estimation
+                    handles = apo_state_estimator(handles,f,f-1);
+                end
             end
         end
-    end
-
-    % forward state estimation
-    for f = (handles.start_frame+1):length(handles.geofeatures)
-        for i = 1:length(handles.Region)
-            for j = 1:length(handles.Region(i).Fascicle)
-                % state estimation
-                handles = state_estimator(handles,f,f-1);
+        % forward state estimation
+        for f = (handles.start_frame+1):length(handles.geofeatures)
+            for i = 1:length(handles.Region)
+                for j = 1:length(handles.Region(i).Fascicle)
+                    % state estimation
+                    handles = state_estimator(handles,f,f-1);
+                end
             end
         end
-    end
-
-%     Rauch-Tung-Striebel backwards filter
-    for f = (length(handles.geofeatures)-1):-1:handles.start_frame
-        for i = 1:length(handles.Region)
-            for j = 1:length(handles.Region(i).Fascicle)
-                handles = state_smoothener(handles,f,f+1);
+    
+    %     Rauch-Tung-Striebel backwards filter
+        for f = (length(handles.geofeatures)-1):-1:handles.start_frame
+            for i = 1:length(handles.Region)
+                for j = 1:length(handles.Region(i).Fascicle)
+                    handles = state_smoothener(handles,f,f+1);
+                end
             end
         end
-    end
 
     else %%% backwards estimator for backwards opticflow tracking
         %%here they are for normal forward  Optic flow tracking
         % forward state estimation
         
-        for f = (handles.NumFrames+handles.start_frame-1) :-1 : (handles.start_frame)
+        for f = (handles.NumFrames+handles.start_frame-1) :-1 : (handles.start_frame)+1
             for i = 1:length(handles.Region)
                 for j = 1:length(handles.Region(i).Fascicle)
                         %frame_geo = (f - (handles.NumFrames))+1; %old
                         %solution with no cutting including
-                        frame_geo = (handles.NumFrames + handles.start_frame - 1) - (f - handles.start_frame); % Direct calculation
+                        %frame_geo = (handles.NumFrames + handles.start_frame - 1) - (f - handles.start_frame); % Direct calculation
                         % state estimation
-                        handles = apo_state_estimator(handles,f-1,f,frame_geo);
+                        handles = apo_state_estimator(handles,f-1,f);
                     
                 end
             end
         end
     
         % forward state estimation
-        for f = (handles.NumFrames+handles.start_frame-1) :-1 :(handles.start_frame)
+        for f = (handles.NumFrames+handles.start_frame-1) :-1 :(handles.start_frame)+1
             for i = 1:length(handles.Region)
                 for j = 1:length(handles.Region(i).Fascicle)
                    %frame_geo = -(f - (handles.NumFrames));
-                    frame_geo = (handles.NumFrames + handles.start_frame - 1) - (f - handles.start_frame); % Direct calculation
+                    %frame_geo = (handles.NumFrames + handles.start_frame - 1) - (f - handles.start_frame); % Direct calculation
 
                     % state estimation
-                    handles = state_estimator(handles,f-1,f,frame_geo);
+                    handles = state_estimator(handles,f-1,f);
                 end
             end
         end
@@ -2249,17 +2289,8 @@ handles.Region(i).Fascicle(j).A{frame_no} = A;
 handles = calc_fascicle_length_and_pennation(handles,frame_no);
 
 
-function[handles] = apo_state_estimator(handles,frame_no,prev_frame_no, varargin)
+function[handles] = apo_state_estimator(handles,frame_no,prev_frame_no)
 
-% Check if the 'geofeatures frame' input is provided (when backwards
-% trackingw as perform)
-if nargin < 4
-    % 'frame n' input is not provided, handle accordingly
-    frame_no_geo = frame_no; % You can set a default because normal tracking 
-else
-    %
-    frame_no_geo = varargin{1};
-end
 i = 1;
 n = handles.vidWidth;
 
@@ -2280,7 +2311,7 @@ apo_prev_y = apo_prev(:,2);
 apo_plus = nan(size(apo_new_y));
 P_plus = nan(size(apo_new_y));
 
-apo_y = [handles.geofeatures(frame_no_geo).super_pos'; handles.geofeatures(frame_no_geo).deep_pos'];
+apo_y = [handles.geofeatures(frame_no).super_pos'; handles.geofeatures(frame_no).deep_pos'];
 
 % check whether manual tracking exists
 if isfield(handles.Region(i), 'sup_x_manual')
@@ -2293,9 +2324,9 @@ end
 
 Rs = handles.R(2:end) * .01;
 if handles.trackbck_chkBox.Value == 0
-    handles.Region(i).apo_p{handles.start_frame} = Rs; %why start frame without+1?
+    handles.Region(i).apo_p{handles.start_frame} = Rs'; %why start frame without+1?
 else
-    handles.Region(i).apo_p{handles.NumFrames + handles.start_frame-1} = Rs; %why end frame?
+    handles.Region(i).apo_p{handles.NumFrames + handles.start_frame-1} = Rs'; %why end frame?
 end
 
 % loop over points (4)
@@ -2366,16 +2397,8 @@ handles.Region(i).sup_y{frame_no} = apo_plus(1:2);
 handles.Region(i).deep_x{frame_no} = [1 n]';
 handles.Region(i).deep_y{frame_no} = apo_plus(3:4);
 
-function[handles] = state_estimator(handles,frame_no,prev_frame_no,varargin)
-% Check if the 'geofeatures frame' input is provided (when backwards
-% trackingw as perform)
-if nargin < 4
-    % 'frame n' input is not provided, handle accordingly
-    frame_no_geo = frame_no; % You can set a default because normal tracking 
-else
-    %
-    frame_no_geo = varargin{1};
-end
+function[handles] = state_estimator(handles,frame_no,prev_frame_no)
+
 
 i = 1; j = 1;
 
@@ -2412,28 +2435,28 @@ if frame_no == (handles.start_frame + 1) && handles.trackbck_chkBox.Value == 0% 
 
     handles = update_Fascicle(handles,handles.start_frame);
 
-    %in case of backwards tracking here
+    %in case of backwards tracking here, if second last frame
 elseif frame_no == (handles.NumFrames -1 + handles.start_frame - 1) && handles.trackbck_chkBox.Value == 1
     alpha0 = nan(1,handles.NS);
 
     for k = 1:handles.NS % number of starting frames
-        alpha0(k) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y_original{frame_no-k}), diff(handles.Region(i).Fascicle(j).fas_x_original{frame_no-k}));
+        alpha0(k) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y_original{frame_no+1-k}), diff(handles.Region(i).Fascicle(j).fas_x_original{frame_no+1-k}));
 %         alpha0(k) = handles.geofeatures(k+handles.start_frame-1).alpha;
     end
 
-    if isempty(handles.Region.Fascicle.fas_x_original{frame_no+1})
-        handles.Region(i).Fascicle(j).X_plus{frame_no+1} = [handles.Region(i).Fascicle(j).fas_x{frame_no+1}(2) mean(alpha0)];
+    if isempty(handles.Region.Fascicle.fas_x_original{handles.NumFrames})
+        handles.Region(i).Fascicle(j).X_plus{handles.NumFrames} = [handles.Region(i).Fascicle(j).fas_x{handles.NumFrames}(2) mean(alpha0)];
     else
-        handles.Region(i).Fascicle(j).X_plus{frame_no+1} = [handles.Region(i).Fascicle(j).fas_x_original{frame_no+1}(2) mean(alpha0)];
+        handles.Region(i).Fascicle(j).X_plus{frame_no+1} = [handles.Region(i).Fascicle(j).fas_x_original{handles.NumFrames}(2) mean(alpha0)];
     end
     handles.Region(i).Fascicle(j).fas_p{frame_no+1} = [0 var(alpha0)];
 
     % if manual is available for first frame, overrule
     if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
         if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual)
-            if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no+1})
-                handles.Region(i).Fascicle(j).X_plus{frame_no+1} = [handles.Region(i).Fascicle(j).fas_x_manual{frame_no+1}(2) handles.Region(i).fas_ang_manual(frame_no+1)];
-                handles.Region(i).Fascicle(j).fas_p{frame_no+1} = [0 0];
+            if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{handles.NumFrames})
+                handles.Region(i).Fascicle(j).X_plus{handles.NumFrames} = [handles.Region(i).Fascicle(j).fas_x_manual{handles.NumFrames}(2) handles.Region(i).fas_ang_manual(handles.NumFrames)];
+                handles.Region(i).Fascicle(j).fas_p{handles.NumFrames} = [0 0];
             end
         end
     end
@@ -2542,7 +2565,7 @@ R(1) = handles.R(1);
 f.x_minus = x_minus(2);
 
 % measurement from Hough transform
-y(1) = handles.geofeatures(frame_no_geo).alpha;
+y(1) = handles.geofeatures(frame_no).alpha;
 
 % if there is a manual estimate, add a second measurement
 if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual')
@@ -2768,7 +2791,7 @@ n = handles.vidWidth;
 % geofeatures.deep_pos = polyval(geofeatures.deep_coef, [1 n]);
 
 % save geofeatures
-handles.geofeatures = geofeatures;
+handles.geofeatures(frame_no) = geofeatures;
 
 Deep_intersect_x = round((geofeatures.deep_coef(2) - geofeatures.fas_coef(2))   ./ (geofeatures.fas_coef(1) - geofeatures.deep_coef(1)));
 Super_intersect_x = round((geofeatures.super_coef(2) - geofeatures.fas_coef(2)) ./ (geofeatures.fas_coef(1) - geofeatures.super_coef(1)));
@@ -3099,6 +3122,19 @@ for k = 1:numel(files) %foreach file
     if handles.flipimage.Value == 1%check based on flip tick box value
         handles = do_flip(hObject, eventdata, handles);
     end
+    %if user wants backwards tracking, check the checkbox and go to the
+    %last frame (important to do here in case someone wants to load and
+    %track a fascicle backwards)
+    if handles.trackbck_chkBox.Value == 0 %if
+        frame_no = 1;%handles.start_frame;
+        set(handles.frame_slider,'Value',frame_no);
+        set(handles.frame_number,'String',num2str(frame_no));
+    else
+
+        frame_no = handles.NumFrames;
+        set(handles.frame_slider,'Value',frame_no);
+        set(handles.frame_number,'String',num2str(handles.NumFrames));
+    end 
     % show the new video
     handles = show_image(hObject,handles);
 
