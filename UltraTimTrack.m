@@ -181,7 +181,7 @@ if datenum(version(1).Date) >= 734202
 
     format_list{1,2} = [format_list{1,2}(1:end-2) ')'];
 
-    newlist = strcat(format_list{1,1},'*.b32;*.b8;*.mat');% add some options that we can use
+    newlist = strcat(format_list{1,1},'*.b32;*.b8;*.mat;*.jpg;*.png;*.bmp;*.jpeg;*.tiff');% add some options that we can use
 
     %load the avi file
     [handles.fname, handles.pname] = uigetfile(newlist, 'Pick a movie file');
@@ -221,21 +221,24 @@ elseif strcmp(Ext,'.mat')
     handles.FrameRate = round(1/(handles.TimeStamps(end-1)/(handles.NumFrames-1)));
     handles.TimeStamps(end) = handles.TimeStamps(end-1)+(1/handles.FrameRate);
 
-elseif strcmp(Ext,'.png')
+elseif strcmp(Ext,'.png') || strcmp(Ext,'.jpg') || strcmp(Ext,'.bmp') || strcmp(Ext,'.jpeg') || strcmp(Ext,'.tiff')
 
     imgRGB = imread([handles.pname handles.fname]);
-    imgCrop = imcrop(imgRGB, [290 44 977 779]);
-    TVDdata.Im = im2double(im2gray(imgCrop));
-    handles.ImStack = TVDdata.Im;
-    handles.ImStack(:,:,2) = TVDdata.Im;
+    
+    if size(imgRGB,3)>1
+        img = rgb2gray(imgRGB);
+    else
+        img = imgRGB;
+    end
+    
+    
+    handles.ImStack = repmat(img, 1, 1, 2);
     handles.vidHeight = size(handles.ImStack,1);
     handles.vidWidth = size(handles.ImStack,2);
-    handles.NumFrames = 2;
-    % sort the time data - the last timestamp is always duplicated and so
-    % needs to be adjusted
+    handles.NumFrames = size(handles.ImStack,3);
+    
     handles.TimeStamps = [1; 2];
     handles.FrameRate = 1;
-    %handles.Time = [0 1];
 
 else
 
@@ -471,6 +474,7 @@ function frame_slider_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'Value') returns position of slider
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
 
+
 % get the current value from the slider (round to ensure it is integer)
 frame_no = round(get(handles.frame_slider,'Value'));
 
@@ -487,7 +491,6 @@ function frame_slider_CreateFcn(hObject, eventdata, handles)
 % handles    empty - handles not created until after all CreateFcns called
 
 % Hint: slider controls usually have a light gray background.
-
 
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
@@ -1379,6 +1382,9 @@ end
 function show_data(hObject, handles)
 % difference with show_image is that this is called once (not per frame)
 
+% find current frame number from slider
+frame_no = round(get(handles.frame_slider,'Value')) + handles.start_frame - 1;
+
 if isfield(handles, 'Region')
     for i = 1:length(handles.Region)
         if isfield(handles.Region(i),'fas_length')
@@ -1399,16 +1405,34 @@ if isfield(handles, 'Region')
 
                 axes(handles.length_plot); 
                 hold off;
-                plot(handles.length_plot,time,FL,'r', time, FLm, 'mx','linewidth',2);
-                set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
-                xlabel('Time (s)');
-                ylabel('Fascicle Length (mm)');
+                
+                if length(time) > 2 % video
+                    plot(handles.length_plot,time,FL,'r', time, FLm, 'mx','linewidth',2);
+                    set(handles.length_plot,'ylim',[min(FL)*0.85 max(FL)*1.15],'box','off','xlim', [0 max(time)]); %set axis 15% difference of min and and value,easier to read
+                    xlabel('Time (s)');
+                    ylabel('Fascicle Length (mm)');
 
+                else
+                    cla
+                    set(handles.length_plot,'ylim',[0 1],'box','off','xlim', [0 1], 'XTick',[],'XTickLabel',[],'YTick',[],'YTickLabel',[])
+                    text(.1, .5, ['Fascicle length = ', num2str(round(FL(frame_no),1)), ' mm'],'FontSize',14)
+                end
+                
                 axes(handles.mat_plot);
-                plot(handles.mat_plot,time,PEN,'r', time, PENm, 'mx','linewidth',2);
-                set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15], 'xlim', [0 max(time)],'box','off'); %set axis 15% difference of min and and value,easier to read
-                xlabel('Time (s)');
-                ylabel('Fascicle angle (deg)');
+                hold off
+                
+                if length(time) > 2 % video
+                    plot(handles.mat_plot,time,PEN,'r', time, PENm, 'mx','linewidth',2);
+                    set(handles.mat_plot,'ylim',[min(PEN)*0.85 max(PEN)*1.15],'box','off','xlim', [0 max(time)]); %set axis 15% difference of min and and value,easier to read
+                    xlabel('Time (s)');
+                    ylabel('Fascicle angle (deg)');
+
+                else
+                    cla
+                    set(handles.mat_plot,'ylim',[0 1],'box','off','xlim', [0 1], 'XTick',[],'XTickLabel',[],'YTick',[],'YTickLabel',[])
+                    text(.1, .5, ['Fascicle angle = ', num2str(round(PEN(frame_no),1)), ' deg'],'FontSize',14)
+                end
+                
 
             end
         end
@@ -2086,7 +2110,7 @@ geofeatures = handles.geofeatures;
 
 x = nan(handles.NumFrames+handles.start_frame-1,5);
 
-for f = handles.start_frame+1:handles.NumFrames+handles.start_frame-1
+for f = handles.start_frame:handles.NumFrames+handles.start_frame-1
     x(f,1) = geofeatures(f).alpha;
     %     x(f,2) = geofeatures(f).thickness;
     x(f,2) = geofeatures(f).super_pos(1);
@@ -2104,8 +2128,13 @@ xcya = isnan(x(:,1));
 x(xcya,:) = [];
 
 y = nan(size(x));
-for i = 1:size(x,2)
-    y(:,i) = filtfilt(b,a,x(:,i));
+if size(x,1) > 6
+    for i = 1:size(x,2)
+        y(:,i) = filtfilt(b,a,x(:,i));
+    end
+    
+else
+    y = x;
 end
 
 handles.R = var(y);
@@ -2129,7 +2158,8 @@ if ~isnan(handles.Q)
                     handles = apo_state_estimator(handles,f,f-1);
                 end
             end
-        end
+         end
+        
         % forward state estimation
         for f = (handles.start_frame+1):length(handles.geofeatures)
             for i = 1:length(handles.Region)
@@ -2206,6 +2236,10 @@ function [K] = run_kalman_filter(k)
 % adjust kalman gain based on measurement variance
 K.K = k.P_minus / (k.P_minus + k.R);
 
+if isnan(K.K)
+    K.K = 0;
+end
+
 % check for weird gains
 if (K.K < 0) || (K.K > 1)
     disp('warning: kalman gain outside 0-1 interval');
@@ -2222,7 +2256,6 @@ K.P_plus = (1-K.K) * k.P_minus;
 
 %State estimator smoothener
 function[handles] = state_smoothener(handles,frame_no,prev_frame_no)
-
 
 i = 1;
 j = 1;
@@ -2899,9 +2932,15 @@ if isfield(handles,"Region")
         for j = 1:numel(handles.Region(i).Fascicle)
             handles.Region(i).Fascicle(j).fas_x = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x, 'UniformOutput', false);
             handles.Region(i).Fascicle(j).fas_y = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y, 'UniformOutput', false);
+            
             if isfield(handles.Region(i).Fascicle(j),'fas_x_end') %if estimator ran
                 handles.Region(i).Fascicle(j).fas_x_end = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x_end, 'UniformOutput', false);
                 handles.Region(i).Fascicle(j).fas_y_end = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y_end, 'UniformOutput', false);
+            end
+            
+            if isfield(handles.Region(i).Fascicle(j),'fas_x_manual') %if estimator ran
+                handles.Region(i).Fascicle(j).fas_x_manual = cellfun(updateX, handles.Region(i).Fascicle(j).fas_x_manual, 'UniformOutput', false);
+                handles.Region(i).Fascicle(j).fas_y_manual = cellfun(@flip, handles.Region(i).Fascicle(j).fas_y_manual, 'UniformOutput', false);
             end
         end
     end
