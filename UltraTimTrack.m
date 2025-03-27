@@ -1456,9 +1456,6 @@ if isfield(handles,'ImStack')
         if isfinite(handles.Region(i).fas_length(frame_no))
             f = frame_no;
 
-            fasx = handles.Region(i).Fascicle(j).fas_x{f};
-            fasy = handles.Region(i).Fascicle(j).fas_y{f};
-
             % create analyzed frame
             d = round(size(handles.ImStack,2)/2);
 
@@ -1468,26 +1465,22 @@ if isfield(handles,'ImStack')
             % add padding
             currentImage = [ZeroPadL, handles.ImStack(:,:,frame_no), ZeroPadR];
 
+            if isfield(handles.Region(i).Fascicle(j), 'fas_y_end') && ~isempty(handles.Region(i).Fascicle(j).fas_y_end{frame_no})
+                fasx = [handles.Region(i).Fascicle(j).fas_x_end{f}];
+                fasy = [handles.Region(i).Fascicle(j).fas_y_end{f}];
+
+            else
+                fasx = handles.Region(i).Fascicle(j).fas_x{f};
+                fasy = handles.Region(i).Fascicle(j).fas_y{f};
+            end
+                
             % add fascicle
             currentImage = insertShape(currentImage,'line',[fasx(1)+d, fasy(1), ...
                 fasx(2)+d,fasy(2)], 'LineWidth',5, 'Color','red');
 
             currentImage = insertMarker(currentImage,[fasx(1)+d, fasy(1);...
                 fasx(2)+d, fasy(2)], 'o', 'Color','red','size',5);
-
-            if isfield(handles.Region(i).Fascicle(j), 'fas_y_end') && ~isempty(handles.Region(i).Fascicle(j).fas_y_end{frame_no})
-                fasx_end = [handles.Region(i).Fascicle(j).fas_x_end{f}];
-                fasy_end = [handles.Region(i).Fascicle(j).fas_y_end{f}];
-
-                % add fascicle
-                currentImage = insertShape(currentImage,'line',[fasx_end(1)+d, fasy_end(1), ...
-                    fasx_end(2)+d,fasy_end(2)], 'LineWidth',5, 'Color','red');
-
-                currentImage = insertMarker(currentImage,[fasx_end(1)+d, fasy_end(1);...
-                    fasx_end(2)+d, fasy_end(2)], 'o', 'Color','red','size',5);
-            end
-
-
+            
             if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual') && length(handles.Region(i).Fascicle(j).fas_x_manual) >= frame_no
                 if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
 
@@ -2209,7 +2202,7 @@ if ~isnan(handles.Q)
             end
         end
     
-    %     Rauch-Tung-Striebel backwards filter
+%         Rauch-Tung-Striebel backwards filter
         for f = handles.start_frame +1 :  handles.NumFrames+handles.start_frame-1
             for i = 1:length(handles.Region)
                 for j = 1:length(handles.Region(i).Fascicle)
@@ -2645,6 +2638,8 @@ if isinf(handles.Q)
     fasP_plus = f.R;
 end
 
+
+%%
 % state estimate
 handles.Region(i).Fascicle(j).X_plus{frame_no}  = [fasx2_plus alpha_plus];
 handles.Region(i).Fascicle(j).X_minus{frame_no} = [fasx2_minus alpha_minus];
@@ -3038,7 +3033,7 @@ if isfield(handles,'ImStack')
 end
 
 % --- Executes on button press in Process_folder.
-function Process_folder_Callback(hObject, eventdata, handles)
+function [handles] = Process_folder_Callback(hObject, eventdata, handles)
 % hObject    handle to Process_folder (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -3070,139 +3065,135 @@ end
 files(ind_toRemove) = []; %keep videos
 % clearvars -except files eventdata hObject handles subFolders
 
+    for k = 1:numel(files) %foreach file
+    
+        handles.fname = files(k).name;
+        handles.pname = [files(k).folder,'/'];
+        handles.start_frame = 1;
+        cd(handles.pname)
+    
+        % start clean
+        if isfield(handles,'ImStack')
+            handles = rmfield(handles, 'ImStack');
+        end
+        if isfield(handles,'ImStackOr')
+            handles = rmfield(handles, 'ImStackOr');
+        end
+        
+        
+        handles.movObj = VideoReader([handles.pname handles.fname]);
+        mb = waitbar(0,'Loading Video....');
 
-for k = 1:numel(files) %foreach file
+        % get info
+        handles.vidHeight = handles.movObj.Height;
+        handles.vidWidth = handles.movObj.Width;
+        handles.NumFrames = handles.movObj.NumFrames;
+        handles.FrameRate = handles.movObj.FrameRate;
 
-    handles.fname = files(k).name;
-    handles.pname = [files(k).folder,'/'];
-    handles.start_frame = 1;
-    cd(handles.pname)
-    handles.movObj = VideoReader([handles.pname handles.fname]);
-    mb = waitbar(0,'Loading Video....');
+        handles.ImStack = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
 
-    % get info
-    handles.vidHeight = handles.movObj.Height;
-    handles.vidWidth = handles.movObj.Width;
-    handles.NumFrames = handles.movObj.NumFrames;
-    handles.FrameRate = handles.movObj.FrameRate;
+        i=1; %simple counter for frames reading
+        while hasFrame(handles.movObj)
+            waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
+            if regexp(handles.movObj.VideoFormat,'RGB')
+                handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
+            else
+                handles.ImStack(:,:,i) = readFrame(handles.movObj);
+            end
+            handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
+            i=i+1;
+        end
 
-    i=1; %simple counter for frames reading
+        waitbar(1,mb)
+        close(mb)
+        
+        cd(handles.pname)
+        % check whether a mat file exists in the location with the same name with
+        % setting of the video (ImageDepth)
+        [path,name,~] = fileparts([handles.pname handles.fname]); %more elegant, people may not have necessarly mp4
+        if exist([path '/' name '.mat'],"file")
+            TVD = load([path '/' name '.mat']);
+            if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
+                %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
+                ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
+                handles.ID = ImageDepth;
+                set(handles.ImDepthEdit,'String',num2str(ImageDepth));
 
-    % start clean
-    %if isfield(handles,'ImTrack')
-    %    handles = rmfield(handles, 'ImTrack');
-    %end
-    if isfield(handles,'ImStack')
-        handles = rmfield(handles, 'ImStack');
-    end
-    if isfield(handles,'ImStackOr')
-        handles = rmfield(handles, 'ImStackOr');
-    end
-
-    handles.ImStack = zeros(handles.vidHeight, handles.vidWidth, handles.NumFrames,'uint8');
-
-    while hasFrame(handles.movObj)
-        waitbar(handles.movObj.CurrentTime/handles.movObj.Duration,mb)
-        if regexp(handles.movObj.VideoFormat,'RGB')
-            handles.ImStack(:,:,i) = im2gray(readFrame(handles.movObj));
+                % Update handles structure
+                guidata(hObject, handles);
+            end
+            if isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
+                handles.Time = TVD.TVDdata.Time(1:end); %note the last timestamp is repeated in Echo Wave II recordings
+            end
         else
-            handles.ImStack(:,:,i) = readFrame(handles.movObj);
+            handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
         end
-        handles.ImBrightness(i) = mean(handles.ImStack(:,:,i),'all');
-        i=i+1;
-    end
 
-    waitbar(1,mb)
-    close(mb)
+        % set the string in the frame_number box to the current frame value (1)
+        set(handles.frame_number,'String',num2str(1))
 
-    cd(handles.pname)
-    % check whether a mat file exists in the location with the same name with
-    % setting of the video (ImageDepth)
-    [path,name,~] = fileparts([handles.pname handles.fname]); %more elegant, people may not have necessarly mp4
-    if exist([path '/' name '.mat'],"file")
-        TVD = load([path '/' name '.mat']);
-        if isfield(TVD.TVDdata,'cmPerPixY') %check whether the field exists and update scalar
-            %ImageDepth = round(TVD.TVDdata.cmPerPixY*10,3); %round to 3 digits
-            ImageDepth = round(TVD.TVDdata.Height * TVD.TVDdata.cmPerPixY,3)*10;
-            handles.ID = ImageDepth;
-            set(handles.ImDepthEdit,'String',num2str(ImageDepth));
+        % set the limits on the slider - use number of frames to set maximum (min =
+        % 1)
+        set(handles.filename,'String',[handles.pname handles.fname])
+        set(handles.frame_slider,'Min',1);
+        set(handles.frame_slider,'Max',handles.NumFrames);
+        set(handles.frame_slider,'Value',1);
+        set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
+        set(handles.frame_rate,'String',handles.FrameRate(1))
+        set(handles.vid_width,'String',handles.vidWidth(1))
+        set(handles.vid_height,'String',handles.vidHeight(1))
+        
+        % update the image axes using show_image function (bottom)
+        handles.ImStackOr = handles.ImStack;
 
-            % Update handles structure
-            guidata(hObject, handles);
+        % crop
+        handles = AutoCrop_Callback(hObject, eventdata, handles);
+
+        %flip every time each video if this is what the user set
+        if handles.flipimage.Value == 1%check based on flip tick box value
+            handles = do_flip(hObject, eventdata, handles);
         end
-        if isfield(TVD.TVDdata,'Time') %check if also time exists as Telemed has uncostant framerate
-            handles.Time = TVD.TVDdata.Time(1:end); %note the last timestamp is repeated in Echo Wave II recordings
+        %if user wants backwards tracking, check the checkbox and go to the
+        %last frame (important to do here in case someone wants to load and
+        %track a fascicle backwards)
+        if handles.trackbck_chkBox.Value == 0 %if
+            frame_no = 1;%handles.start_frame;
+            set(handles.frame_slider,'Value',frame_no);
+            set(handles.frame_number,'String',num2str(frame_no));
+        else
+
+            frame_no = handles.NumFrames;
+            set(handles.frame_slider,'Value',frame_no);
+            set(handles.frame_number,'String',num2str(handles.NumFrames));
+        end 
+        % show the new video
+        handles = show_image(hObject,handles);
+
+        %load fascicle automatically if exists
+        if exist([path '/Fas_Data/Fas_' name '.mat'],'file')
+            %go to last frame
+            %set(handles.frame_slider,'Value',handles.NumFrames);
+            %set(handles.frame_number,'String',handles.NumFrames);
+            %set(handles.frame_)
+            % load
+            handles = menu_load_fascicle_Callback(hObject, eventdata, handles,[path '/Fas_Data/Fas_' name '.mat']);
         end
-    else
-        handles.Time = (double(1/handles.FrameRate):double(1/handles.FrameRate):double(handles.NumFrames/handles.FrameRate))';
+
+        %create a subfolder where to save results and tracked videos
+        if ~exist([handles.pname 'Tracked/'], 'dir')
+            mkdir([handles.pname 'Tracked/'])
+        end
+        handles.pname = [handles.pname 'Tracked/'];
+
+        % process all based on what the ROI type is
+        handles = process_all_Callback(hObject, eventdata, handles);
+
+        % save
+        save_video_Callback(hObject, eventdata, handles)
+        Save_As_Mat_Callback(hObject, eventdata, handles)
+
     end
 
-    % set the string in the frame_number box to the current frame value (1)
-    set(handles.frame_number,'String',num2str(1))
-
-    % set the limits on the slider - use number of frames to set maximum (min =
-    % 1)
-    set(handles.filename,'String',[handles.pname handles.fname])
-    set(handles.frame_slider,'Min',1);
-    set(handles.frame_slider,'Max',handles.NumFrames);
-    set(handles.frame_slider,'Value',1);
-    set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
-    set(handles.frame_rate,'String',handles.FrameRate(1))
-    set(handles.vid_width,'String',handles.vidWidth(1))
-    set(handles.vid_height,'String',handles.vidHeight(1))
-
-    % update the image axes using show_image function (bottom)
-    handles.ImStackOr = handles.ImStack;
-
-    % crop
-    handles = AutoCrop_Callback(hObject, eventdata, handles);
-
-    %flip every time each video if this is what the user set
-    if handles.flipimage.Value == 1%check based on flip tick box value
-        handles = do_flip(hObject, eventdata, handles);
-    end
-    %if user wants backwards tracking, check the checkbox and go to the
-    %last frame (important to do here in case someone wants to load and
-    %track a fascicle backwards)
-    if handles.trackbck_chkBox.Value == 0 %if
-        frame_no = 1;%handles.start_frame;
-        set(handles.frame_slider,'Value',frame_no);
-        set(handles.frame_number,'String',num2str(frame_no));
-    else
-
-        frame_no = handles.NumFrames;
-        set(handles.frame_slider,'Value',frame_no);
-        set(handles.frame_number,'String',num2str(handles.NumFrames));
-    end 
-    % show the new video
-    handles = show_image(hObject,handles);
-
-    %load fascicle automatically if exists
-    if exist([path '/Fas_Data/Fas_' name '.mat'],'file')
-        %go to last frame
-        %set(handles.frame_slider,'Value',handles.NumFrames);
-        %set(handles.frame_number,'String',handles.NumFrames);
-        %set(handles.frame_)
-        % load
-        handles = menu_load_fascicle_Callback(hObject, eventdata, handles,[path '/Fas_Data/Fas_' name '.mat']);
-    end
-
-     
-  
-    %create a subfolder where to save results and tracked videos
-    if ~exist([handles.pname 'Tracked/'], 'dir')
-        mkdir([handles.pname 'Tracked/'])
-    end
-    handles.pname = [handles.pname 'Tracked/'];
-
-    % process all based on what the ROI type is
-    handles = process_all_Callback(hObject, eventdata, handles);
-
-    % save
-    save_video_Callback(hObject, eventdata, handles)
-    Save_As_Mat_Callback(hObject, eventdata, handles)
-
-end
 
 function freq_lpf_Callback(hObject, eventdata, handles)
 % hObject    handle to freq_lpf (see GCBO)
@@ -3734,6 +3725,12 @@ N = handles.NumFrames + handles.start_frame - 1;
 handles.Region(i).fas_length_manual    = nan(N,1);
 handles.Region(i).fas_pen_manual       = nan(N,1);
 
+handles.Region(i).Fascicle(j).fas_x = handles.Region(i).Fascicle(j).fas_x_original;
+handles.Region(i).Fascicle(j).fas_y = handles.Region(i).Fascicle(j).fas_y_original;
+
+handles.Region(i).Fascicle(j).fas_x_end = handles.Region(i).Fascicle(j).fas_x_original;
+handles.Region(i).Fascicle(j).fas_y_end = handles.Region(i).Fascicle(j).fas_y_original;
+
 rmfields = {'sup_x_manual', 'sup_y_manual','deep_x_manual','deep_y_manual','ROIx_manual','ROIy_manual','fas_ang_manual'};
 
 for j = 1:length(rmfields)
@@ -4128,3 +4125,108 @@ if isfield(handles,'Region')
 end
 % Hint: get(hObject,'Value') returns toggle state of trackbck_chkBox
  
+
+
+% --------------------------------------------------------------------
+function menu_load_images_Callback(hObject, eventdata, handles)
+% hObject    handle to menu_load_images (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+dir_data = uigetdir(cd,'Select folder with images(s)');
+
+if dir_data == 0 %no folder selected, just return
+    return
+end
+
+files = dir(dir_data);
+
+image_formats = {'.b32';'.b8';'.mat';'.jpg';'.png';'.bmp';'.jpeg';'.tiff'};% add some options that we can use
+
+ind_toRemove = [];
+for n_file = 1 : numel(files)
+    [~,~,ext] = fileparts(files(n_file).name);
+    %save indexes of thefile that are not videos
+    if sum(strcmp(image_formats,ext)) == 0
+        ind_toRemove = [ind_toRemove n_file];
+    end
+end
+
+files(ind_toRemove) = []; %keep images
+
+for k = 1:numel(files) %foreach file
+
+    handles.fname = files(k).name;
+    handles.pname = [files(k).folder,'/'];
+    handles.start_frame = 1;
+    cd(handles.pname)
+
+    imgRGB = imread([handles.pname handles.fname]);
+
+    if size(imgRGB,3)>1
+        img = rgb2gray(imgRGB);
+    else
+        img = imgRGB;
+    end
+
+    handles.ImStack(:,:,k) = img;
+
+end
+
+handles.vidHeight = size(handles.ImStack,1);
+handles.vidWidth = size(handles.ImStack,2);
+handles.NumFrames = size(handles.ImStack,3);
+
+% update the image axes using show_image function (bottom)
+handles.ImStackOr = handles.ImStack;
+
+% crop
+% handles = AutoCrop_Callback(hObject, eventdata, handles);
+
+% display the path and name of the file in the filename text box
+set(handles.filename,'String',[handles.pname handles.fname])
+
+% set the string in the frame_number box to the current frame value (1)
+set(handles.frame_number,'String',num2str(1))
+
+% allows Cut_frames_before_Callback to work
+handles.start_frame = 1;
+
+% arbitrary
+handles.FrameRate = 100;
+
+% set the limits on the slider - use number of frames to set maximum (min =
+% 1)
+set(handles.frame_slider,'Min',1);
+set(handles.frame_slider,'Max',handles.NumFrames);
+set(handles.frame_slider,'Value',1);
+set(handles.frame_slider,'SliderStep',[1/handles.NumFrames 10/handles.NumFrames]);
+set(handles.frame_rate,'String',handles.FrameRate(1))
+set(handles.vid_width,'String',handles.vidWidth(1))
+set(handles.vid_height,'String',handles.vidHeight(1))
+
+% only rely on TimTrack
+% handles.Q = inf;
+
+% update the image axes using show_image function (bottom)
+show_data(hObject, handles);
+
+% update the image axes using show_image function (bottom)
+show_image(hObject, handles);
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
