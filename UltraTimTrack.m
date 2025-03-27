@@ -1473,13 +1473,7 @@ if isfield(handles,'ImStack')
                 fasx = handles.Region(i).Fascicle(j).fas_x{f};
                 fasy = handles.Region(i).Fascicle(j).fas_y{f};
             end
-                
-            % add fascicle
-            currentImage = insertShape(currentImage,'line',[fasx(1)+d, fasy(1), ...
-                fasx(2)+d,fasy(2)], 'LineWidth',5, 'Color','red');
-
-            currentImage = insertMarker(currentImage,[fasx(1)+d, fasy(1);...
-                fasx(2)+d, fasy(2)], 'o', 'Color','red','size',5);
+               
             
             if isfield(handles.Region(i).Fascicle(j), 'fas_x_manual') && length(handles.Region(i).Fascicle(j).fas_x_manual) >= frame_no
                 if ~isempty(handles.Region(i).Fascicle(j).fas_x_manual{frame_no})
@@ -1495,6 +1489,14 @@ if isfield(handles,'ImStack')
                         fasx_manual(2)+d, fasy_manual(2)], 'o', 'Color','magenta','size',5);
                 end
             end
+            
+            % add fascicle
+            currentImage = insertShape(currentImage,'line',[fasx(1)+d, fasy(1), ...
+                fasx(2)+d,fasy(2)], 'LineWidth',5, 'Color','red');
+
+            currentImage = insertMarker(currentImage,[fasx(1)+d, fasy(1);...
+                fasx(2)+d, fasy(2)], 'o', 'Color','red','size',5);
+            
 
             % add aponeurosis
             currentImage = insertShape(currentImage,'line',[handles.Region(i).sup_x{f}(1)+d, handles.Region(i).sup_y{f}(1), ...
@@ -4216,6 +4218,59 @@ show_image(hObject, handles);
 
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes on button press in center_fascicle.
+function center_fascicle_Callback(hObject, eventdata, handles)
+% hObject    handle to center_fascicle (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of center_fascicle
+
+n = handles.NumFrames;
+m = handles.vidWidth;
+i = 1;
+
+for frame_no = 1:n
+
+    super_apo   = [handles.Region(i).sup_x{frame_no} handles.Region(i).sup_y{frame_no}];
+    deep_apo    = [handles.Region(i).deep_x{frame_no} handles.Region(i).deep_y{frame_no}];
+    super_coef  = polyfit(super_apo(:,1), super_apo(:,2), 1);
+    deep_coef   = polyfit(deep_apo(:,1), deep_apo(:,2), 1);
+    
+    Mx = round(m/2);
+    My = mean([polyval(deep_coef, Mx) polyval(super_coef, Mx)]);
+    
+    faslen = handles.Region.fas_length(frame_no) * (handles.vidHeight/handles.ID);
+    alpha = handles.Region.fas_ang(frame_no);
+    
+    fas_coef(1) = -tand(alpha);
+    fas_coef(2) =  My - Mx * fas_coef(1);
+    
+    x = round(fzero(@(x) polyval(deep_coef(:)-fas_coef(:),x),0));
+
+    apo_intersect = [x                           polyval(deep_coef,x);
+                     x + faslen * cosd(alpha)     polyval(super_coef,x + faslen * cosd(alpha))];
+
+    handles.Region.Fascicle.fas_x{frame_no} = apo_intersect(:,1);
+    handles.Region.Fascicle.fas_y{frame_no} = apo_intersect(:,2);
+end
+
+handles.Region.Fascicle.fas_x_end = handles.Region.Fascicle.fas_x;
+handles.Region.Fascicle.fas_y_end = handles.Region.Fascicle.fas_y;
+
+% update the image axes using show_image function (bottom)
+show_data(hObject, handles);
+
+% update the image axes using show_image function (bottom)
+show_image(hObject, handles);
+
+% Update handles structure
+guidata(hObject, handles);
+
+
+
 
 
 
