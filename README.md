@@ -45,3 +45,16 @@ If the user would like to start tracking at a different part of the image sequen
 
 ### Telemed ultrasound systems
 For users of [Telemed ultrasound systems](https://www.telemedultrasound.com/en/home/), we strongly recommend saving ultrasound image sequences (i.e., videos) in the .tvd file format. This is because the system may have an inconsistent sample rate; however, the timestamp of each frame, along with other information such as image resolution, is saved within the .tvd file.  You can find the [main script](https://github.com/timvanderzee/UltraTimTrack/tree/main/functions/ConvertTVD) and instructions for converting .tvd files into ".mat + .mp4" inside this repository/functions/ConvertTVD. The .mp4 file format also saves significant memory (approximately five times less) compared to .tvd; whilst the .mat file contains all the timestamps and image resolutions. UltraTimTrack automatically reads these parameters if the .mp4 and .mat files share the same name and are located in the same folder.
+
+### Dependencies
+UltraTimTrack requires the following MATLAB toolboxes:
+
+•	Computer Vision Toolbox
+
+•	Image Processing Toolbox
+
+•	Parallel Computing Toolbox
+
+•	Signal Processing Toolbox
+
+
