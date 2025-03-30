@@ -2132,15 +2132,10 @@ end
 function[handles] = estimate_variance(hObject, eventdata, handles)
 
 geofeatures = handles.geofeatures;
-
-% frames = handles.start_frame:handles.start_frame + handles.NumFrames-1;
-% numIterations = length(frames);
-
 x = nan(handles.NumFrames+handles.start_frame-1,5);
 
 for f = handles.start_frame:handles.NumFrames+handles.start_frame-1
     x(f,1) = geofeatures(f).alpha;
-    %     x(f,2) = geofeatures(f).thickness;
     x(f,2) = geofeatures(f).super_pos(1);
     x(f,3) = geofeatures(f).super_pos(2);
     x(f,4) = geofeatures(f).deep_pos(1);
@@ -2337,13 +2332,10 @@ fasy2_smooth_end = super_coef(2) + fasx2_smooth_end*super_coef(1);
 
 handles.Region(i).Fascicle(j).fas_x{frame_no}   = [fasx1_smooth; fasx2_smooth];
 handles.Region(i).Fascicle(j).fas_y{frame_no}   = [fasy1_smooth; fasy2_smooth];
-
 handles.Region(i).Fascicle(j).fas_x_end{frame_no}   = [fasx1_smooth; fasx2_smooth_end];
 handles.Region(i).Fascicle(j).fas_y_end{frame_no}   = [fasy1_smooth; fasy2_smooth_end];
-
 handles.Region(i).Fascicle(j).alpha{frame_no}       = alpha_smooth;
 handles.Region(i).Fascicle(j).fas_p{frame_no}       = Psmooth;
-
 handles.Region(i).Fascicle(j).A{frame_no} = A;
 
 % calculate the length and pennation for the current frame
@@ -2450,9 +2442,7 @@ for kk = 1:numel(apo_new_y)
 end
 
 handles.Region(i).apo_p{frame_no} = P_plus;
-
 handles.Region(i).apo_gain{frame_no} = apo_gain';
-
 handles.Region(i).sup_x{frame_no} = [1 n]';
 handles.Region(i).sup_y{frame_no} = apo_plus(1:2);
 handles.Region(i).deep_x{frame_no} = [1 n]';
@@ -2470,7 +2460,6 @@ if frame_no == (handles.start_frame + 1) && handles.trackbck_chkBox.Value == 0% 
 
     for k = 1:handles.NS % number of starting frames
         alpha0(k) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y_original{k+handles.start_frame-1}), diff(handles.Region(i).Fascicle(j).fas_x_original{k+handles.start_frame-1}));
-%         alpha0(k) = handles.geofeatures(k+handles.start_frame-1).alpha;
     end
 
     if isempty(handles.Region.Fascicle.fas_x_original{handles.start_frame})
@@ -2694,10 +2683,6 @@ function[handles] = update_Fascicle(handles,frame_no)
 i = 1;
 j = 1;
 
-% if frame_no == 5
-%     keyboard
-% end
-
 % get the state
 fasx2_plus = handles.Region(i).Fascicle(j).X_plus{frame_no}(1);
 alpha_plus = handles.Region(i).Fascicle(j).X_plus{frame_no}(2);
@@ -2750,13 +2735,9 @@ if ~isfield(handles.Region,'fas_length') || ~isfield(handles.Region,'fas_pen') |
     handles.Region(i).fas_ang = nan((handles.NumFrames+handles.start_frame-1),j);
     handles.Region(i).fas_length = nan((handles.NumFrames+handles.start_frame-1),j);
 end
-% fit the current aponeurosis
-% ROI         = [handles.Region(i).ROIx{frame_no} handles.Region(i).ROIy{frame_no}];
-% deep_apo    = ROI([2,3],:);
-
-deep_apo =  [handles.Region(i).deep_x{frame_no} handles.Region(i).deep_y{frame_no}];
 
 % deep aponeurosis angle
+deep_apo =  [handles.Region(i).deep_x{frame_no} handles.Region(i).deep_y{frame_no}];
 gamma = atan2d(-diff(deep_apo(:,2)), diff(deep_apo(:,1)));
 handles.Region(i).fas_ang(frame_no,j) = atan2d(-diff(handles.Region(i).Fascicle(j).fas_y{frame_no}), diff(handles.Region(i).Fascicle(j).fas_x{frame_no}));
 handles.Region(i).fas_pen(frame_no,j) = handles.Region(i).fas_ang(frame_no,j) - gamma;
