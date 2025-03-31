@@ -2772,7 +2772,7 @@ function [handles] = Auto_Detect_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-try
+
     % initialize
     N = handles.NumFrames + handles.start_frame - 1;
     handles.Region(1).fas_length    = nan(N,1);
@@ -2782,12 +2782,20 @@ try
     
     w = handles.vidWidth;
     
-    if ~isvalid(handles.S)
-        handles.S = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
+    if isfield(handles, 'S')
+        if ~isvalid(handles.S)
+            handles.S = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
+        end
+    else
+            handles.S = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.super.cut(1)*handles.vidHeight w diff(handles.parms.apo.super.cut)*handles.vidHeight],'color','blue');
     end
     
-    if ~isvalid(handles.D)
-        handles.D = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
+    if isfield(handles, 'D')
+        if ~isvalid(handles.D)
+            handles.D = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
+        end
+    else
+       handles.D = images.roi.Rectangle(handles.axes1,'position', [1 handles.parms.apo.deep.cut(1)*handles.vidHeight w diff(handles.parms.apo.deep.cut)*handles.vidHeight],'color','green');
     end
     
     %% Aponeurosis detection
@@ -2857,9 +2865,7 @@ try
     
     show_image(hObject,handles);
     show_data(hObject, handles)
-catch
-    warndlg('No video loaded')
-end
+
 
 function [handles] = extract_estimates(hObject, eventdata, handles)
 
@@ -3617,7 +3623,7 @@ if isfield(handles,'s')
     end
 end
 
-try
+
     i = 1;
     j = 1;
     
@@ -3691,9 +3697,7 @@ try
     
     guidata(hObject, handles);
     
-catch
-    warndlg('No video loaded!')
-end
+
 function manual_variance_Callback(hObject, eventdata, handles)
 % hObject    handle to manual_variance (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
